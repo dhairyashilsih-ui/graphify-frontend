@@ -9,6 +9,7 @@ export async function extractKeyFacts(userMessage: string, aiResponse: string): 
     {
       role: 'system',
       content: 'You are a strict key-fact extractor. ONLY extract facts that are EXPLICITLY stated by the user and are PERSONAL (name, age, city, job, company, phone, goal, etc.). Output ONLY in "key: value" format, one fact per line, max 5 words per value, max 5 lines, NO assumptions, NO intent, NO behavior, NO tone, NO emotion, NO conversation state, NO filler facts. If NO personal data exists → output NOTHING (empty response). NEVER generate inferred data.'
+    },
     {
       role: 'user',
       content: `User: ${userMessage}\n\nExtract facts (one per line):`

@@ -334,8 +334,8 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
 
       // Get response from Groq
       const aiResponse = await sendToGroq(requestMessages);
-      
-      // Speak the response immediately - don't wait for fact extraction
+
+      // Speak immediately (don't wait for fact extraction/save)
       voiceAssistantRef.current?.speak(aiResponse, {
         onStart: () => {
           setIsSpeaking(true);
@@ -346,27 +346,23 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
         }
       });
 
-      // Extract facts and save to database in background (after speaking starts)
+      // Extract facts and save in background so speech is not delayed
       (async () => {
         try {
           const newFacts = await extractKeyFacts(userText, aiResponse);
-          
+
           if (newFacts.length > 0) {
-            // Process each new fact
             for (const newFact of newFacts) {
               const factKey = newFact.toLowerCase().split(':')[0].trim();
-              
-              // Find and replace existing fact with same key
-              const existingIndex = keyFactsRef.current.findIndex(existing => 
+
+              const existingIndex = keyFactsRef.current.findIndex(existing =>
                 existing.toLowerCase().split(':')[0].trim() === factKey
               );
-              
+
               if (existingIndex >= 0) {
-                // Update existing fact
                 keyFactsRef.current[existingIndex] = newFact;
                 console.log('Updated fact:', newFact);
               } else {
-                // Add new fact
                 keyFactsRef.current.push(newFact);
                 console.log('Saved fact:', newFact);
               }
@@ -376,7 +372,6 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
             console.log('No important facts to save');
           }
 
-          // Save only the compressed facts to MongoDB (not full conversation)
           await saveConversation(sessionIdRef.current, [
             conversationHistory.current[0],
             {
@@ -384,8 +379,8 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
               content: buildContextString(keyFactsRef.current)
             }
           ]);
-        } catch (error) {
-          console.error('Background fact extraction error:', error);
+        } catch (err) {
+          console.error('Background fact extraction/save failed:', err);
         }
       })();
     } catch (error) {
