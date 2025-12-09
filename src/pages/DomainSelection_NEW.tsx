@@ -387,7 +387,7 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
             >
               <div className="w-40 h-40 md:w-52 md:h-52 lg:w-64 lg:h-64 relative">
                 <img 
-                  src="/homeora.png" 
+                  src="/homeora.svg" 
                   alt="FUSION AI Assistant" 
                   className="w-full h-full object-contain drop-shadow-2xl"
                 />

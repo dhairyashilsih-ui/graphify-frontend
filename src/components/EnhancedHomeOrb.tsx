@@ -10,7 +10,7 @@ interface EnhancedHomeOrbProps {
 
 export default function EnhancedHomeOrb({ 
   isActive = false, 
-  image = "/homeora.png",
+  image = "/homeora.svg",
   title = "FUSION AI",
   subtitle = "Choose Your Domain"
 }: EnhancedHomeOrbProps) {
