@@ -134,7 +134,7 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
   const conversationHistory = useRef<GroqMessage[]>([
     {
       role: 'system',
-      content: 'You are Graphify — a friendly, smart AI that remembers context and thinks in connections. You speak like a helpful human, keep answers simple, and always respond with clarity and warmth. You help users choose the right domain for their needs. Available domains: Agriculture, Health, Education, Finance, Transport, and Universal AI.'
+      content: 'You are Graphify — a friendly, smart AI that remembers context and thinks in connections.You keep data of user which is below given read that. You speak like a helpful human, keep answers simple, and always respond with clarity and warmth. You help users choose the right domain for their needs. Available domains: Agriculture, Health, Education, Finance, Transport, and Universal AI.'
     }
   ]);
 
@@ -330,8 +330,6 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
         }
       ];
 
-      console.log('Request:', requestMessages);
-
       // Get response from Groq
       const aiResponse = await sendToGroq(requestMessages);
 
@@ -361,16 +359,11 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
 
               if (existingIndex >= 0) {
                 keyFactsRef.current[existingIndex] = newFact;
-                console.log('Updated fact:', newFact);
               } else {
                 keyFactsRef.current.push(newFact);
-                console.log('Saved fact:', newFact);
               }
             }
-            console.log('All facts:', keyFactsRef.current);
-          } else {
-            console.log('No important facts to save');
-          }
+              }
 
           await saveConversation(sessionIdRef.current, [
             conversationHistory.current[0],
