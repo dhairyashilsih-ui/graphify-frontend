@@ -8,7 +8,7 @@ export async function extractKeyFacts(userMessage: string, aiResponse: string): 
   const extractPrompt: GroqMessage[] = [
     {
       role: 'system',
-      content: 'Extract key facts as "key: value" format (max 5 words each). Use these keys: name, occupation, location, age, preference. Return each on new line. If nothing important, return "none".'
+      content: 'Extract key facts as "key: value" format (max 5 words). If the data is personal to user or related to user ex- name:om , village:pune like this save each key fact on new line and save max 5 key facts minimum 0 is ok '
     },
     {
       role: 'user',
