@@ -335,44 +335,7 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
       // Get response from Groq
       const aiResponse = await sendToGroq(requestMessages);
       
-      // Extract key facts from this exchange (returns array)
-      const newFacts = await extractKeyFacts(userText, aiResponse);
-      
-      if (newFacts.length > 0) {
-        // Process each new fact
-        for (const newFact of newFacts) {
-          const factKey = newFact.toLowerCase().split(':')[0].trim();
-          
-          // Find and replace existing fact with same key
-          const existingIndex = keyFactsRef.current.findIndex(existing => 
-            existing.toLowerCase().split(':')[0].trim() === factKey
-          );
-          
-          if (existingIndex >= 0) {
-            // Update existing fact
-            keyFactsRef.current[existingIndex] = newFact;
-            console.log('Updated fact:', newFact);
-          } else {
-            // Add new fact
-            keyFactsRef.current.push(newFact);
-            console.log('Saved fact:', newFact);
-          }
-        }
-        console.log('All facts:', keyFactsRef.current);
-      } else {
-        console.log('No important facts to save');
-      }
-
-      // Save only the compressed facts to MongoDB (not full conversation)
-      await saveConversation(sessionIdRef.current, [
-        conversationHistory.current[0],
-        {
-          role: 'system',
-          content: buildContextString(keyFactsRef.current)
-        }
-      ]);
-
-      // Speak the response
+      // Speak the response immediately - don't wait for fact extraction
       voiceAssistantRef.current?.speak(aiResponse, {
         onStart: () => {
           setIsSpeaking(true);
@@ -382,6 +345,49 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
           setTimeout(() => startListening(), 500);
         }
       });
+
+      // Extract facts and save to database in background (after speaking starts)
+      (async () => {
+        try {
+          const newFacts = await extractKeyFacts(userText, aiResponse);
+          
+          if (newFacts.length > 0) {
+            // Process each new fact
+            for (const newFact of newFacts) {
+              const factKey = newFact.toLowerCase().split(':')[0].trim();
+              
+              // Find and replace existing fact with same key
+              const existingIndex = keyFactsRef.current.findIndex(existing => 
+                existing.toLowerCase().split(':')[0].trim() === factKey
+              );
+              
+              if (existingIndex >= 0) {
+                // Update existing fact
+                keyFactsRef.current[existingIndex] = newFact;
+                console.log('Updated fact:', newFact);
+              } else {
+                // Add new fact
+                keyFactsRef.current.push(newFact);
+                console.log('Saved fact:', newFact);
+              }
+            }
+            console.log('All facts:', keyFactsRef.current);
+          } else {
+            console.log('No important facts to save');
+          }
+
+          // Save only the compressed facts to MongoDB (not full conversation)
+          await saveConversation(sessionIdRef.current, [
+            conversationHistory.current[0],
+            {
+              role: 'system',
+              content: buildContextString(keyFactsRef.current)
+            }
+          ]);
+        } catch (error) {
+          console.error('Background fact extraction error:', error);
+        }
+      })();
     } catch (error) {
       console.error('Error processing input:', error);
       const errorMsg = 'Sorry, I encountered an error. Please try again.';
