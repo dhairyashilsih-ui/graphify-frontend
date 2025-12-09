@@ -1,0 +1,109 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer Circle with Gradient Border -->
+  <circle cx="100" cy="100" r="95" fill="url(#gradient1)" stroke="url(#gradient2)" stroke-width="3"/>
+  
+  <!-- Circuit Pattern Background -->
+  <g opacity="0.3">
+    <!-- Horizontal Lines -->
+    <line x1="30" y1="70" x2="80" y2="70" stroke="#00D9FF" stroke-width="1.5"/>
+    <line x1="120" y1="70" x2="170" y2="70" stroke="#00D9FF" stroke-width="1.5"/>
+    <line x1="30" y1="130" x2="80" y2="130" stroke="#00D9FF" stroke-width="1.5"/>
+    <line x1="120" y1="130" x2="170" y2="130" stroke="#00D9FF" stroke-width="1.5"/>
+    
+    <!-- Vertical Lines -->
+    <line x1="70" y1="30" x2="70" y2="80" stroke="#00D9FF" stroke-width="1.5"/>
+    <line x1="70" y1="120" x2="70" y2="170" stroke="#00D9FF" stroke-width="1.5"/>
+    <line x1="130" y1="30" x2="130" y2="80" stroke="#00D9FF" stroke-width="1.5"/>
+    <line x1="130" y1="120" x2="130" y2="170" stroke="#00D9FF" stroke-width="1.5"/>
+    
+    <!-- Circuit Nodes -->
+    <circle cx="70" cy="70" r="3" fill="#00D9FF"/>
+    <circle cx="130" cy="70" r="3" fill="#00D9FF"/>
+    <circle cx="70" cy="130" r="3" fill="#00D9FF"/>
+    <circle cx="130" cy="130" r="3" fill="#00D9FF"/>
+  </g>
+  
+  <!-- Top Center Orb (Largest) -->
+  <circle cx="100" cy="55" r="18" fill="url(#orb1)" filter="url(#glow)"/>
+  <circle cx="100" cy="55" r="18" fill="none" stroke="#00D9FF" stroke-width="2" opacity="0.6"/>
+  <circle cx="100" cy="55" r="12" fill="#00D9FF" opacity="0.8"/>
+  <circle cx="100" cy="55" r="6" fill="#FFFFFF"/>
+  
+  <!-- Left Orb -->
+  <circle cx="60" cy="80" r="14" fill="url(#orb2)" filter="url(#glow)"/>
+  <circle cx="60" cy="80" r="14" fill="none" stroke="#00A3CC" stroke-width="1.5" opacity="0.5"/>
+  <circle cx="60" cy="80" r="9" fill="#00A3CC" opacity="0.7"/>
+  <circle cx="60" cy="80" r="4" fill="#FFFFFF"/>
+  
+  <!-- Right Orb -->
+  <circle cx="140" cy="80" r="14" fill="url(#orb3)" filter="url(#glow)"/>
+  <circle cx="140" cy="80" r="14" fill="none" stroke="#00FFAA" stroke-width="1.5" opacity="0.5"/>
+  <circle cx="140" cy="80" r="9" fill="#00FFAA" opacity="0.7"/>
+  <circle cx="140" cy="80" r="4" fill="#FFFFFF"/>
+  
+  <!-- Falcon/Bird Abstract Shape -->
+  <path d="M 100 100 Q 85 120, 70 140 Q 75 145, 80 140 L 100 120 Z" fill="url(#gradient3)" opacity="0.7"/>
+  <path d="M 100 100 Q 115 120, 130 140 Q 125 145, 120 140 L 100 120 Z" fill="url(#gradient3)" opacity="0.7"/>
+  
+  <!-- Central Tech Core -->
+  <circle cx="100" cy="100" r="25" fill="url(#coreGradient)" stroke="#00D9FF" stroke-width="2"/>
+  <circle cx="100" cy="100" r="20" fill="none" stroke="#00D9FF" stroke-width="1" opacity="0.3" stroke-dasharray="4 2"/>
+  <circle cx="100" cy="100" r="15" fill="none" stroke="#00D9FF" stroke-width="1" opacity="0.5"/>
+  
+  <!-- Dollar Sign Symbol -->
+  <text x="100" y="110" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#FFFFFF" text-anchor="middle">$</text>
+  
+  <!-- Connecting Lines to Orbs -->
+  <line x1="100" y1="55" x2="100" y2="75" stroke="#00D9FF" stroke-width="2" opacity="0.4"/>
+  <line x1="60" y1="80" x2="80" y2="90" stroke="#00A3CC" stroke-width="2" opacity="0.4"/>
+  <line x1="140" y1="80" x2="120" y2="90" stroke="#00FFAA" stroke-width="2" opacity="0.4"/>
+  
+  <!-- Definitions -->
+  <defs>
+    <!-- Gradients -->
+    <radialGradient id="gradient1" cx="50%" cy="30%">
+      <stop offset="0%" style="stop-color:#0A1F44;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#001A3D;stop-opacity:1" />
+    </radialGradient>
+    
+    <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF6B35;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#00D9FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FF6B35;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="gradient3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00D9FF;stop-opacity:0.6" />
+      <stop offset="100%" style="stop-color:#00FFAA;stop-opacity:0.4" />
+    </linearGradient>
+    
+    <radialGradient id="orb1">
+      <stop offset="0%" style="stop-color:#00D9FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0066CC;stop-opacity:0.8" />
+    </radialGradient>
+    
+    <radialGradient id="orb2">
+      <stop offset="0%" style="stop-color:#00A3CC;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#004466;stop-opacity:0.8" />
+    </radialGradient>
+    
+    <radialGradient id="orb3">
+      <stop offset="0%" style="stop-color:#00FFAA;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#006655;stop-opacity:0.8" />
+    </radialGradient>
+    
+    <radialGradient id="coreGradient" cx="40%" cy="40%">
+      <stop offset="0%" style="stop-color:#1E3A8A;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0A1F44;stop-opacity:1" />
+    </radialGradient>
+    
+    <!-- Glow Effect -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+</svg>
