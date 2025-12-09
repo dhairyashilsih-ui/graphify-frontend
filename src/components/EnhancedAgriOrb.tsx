@@ -26,6 +26,7 @@ export default function EnhancedAgriOrb({ isActive = false, image, isSpeaking = 
         style={{
           background: 'conic-gradient(from 0deg, #22c55e, #10b981, #06d6a0, #22c55e)',
           filter: 'blur(3px)',
+          willChange: 'transform',
         }}
       />
 
@@ -43,17 +44,18 @@ export default function EnhancedAgriOrb({ isActive = false, image, isSpeaking = 
         className="absolute inset-4 rounded-full bg-gradient-to-br from-green-300/40 via-emerald-400/30 to-teal-400/40 blur-xl"
       />
 
-      {/* Floating Particles */}
+      {/* Floating Particles - Reduced from 8 to 4 */}
       <div className="absolute inset-0">
-        {[...Array(8)].map((_, i) => (
+        {[...Array(4)].map((_, i) => (
           <motion.div
             key={i}
             className="absolute w-2 h-2 bg-green-300/60 rounded-full"
             style={{
               top: '50%',
               left: '50%',
-              transform: `rotate(${i * 45}deg) translateY(-100px) translateX(-50%)`,
+              transform: `rotate(${i * 90}deg) translateY(-100px) translateX(-50%)`,
               transformOrigin: '50% 100px',
+              willChange: 'transform, opacity',
             }}
             animate={{
               rotate: [0, 360],

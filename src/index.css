@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Poppins:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,13 +6,15 @@
 
 @layer base {
   body {
-    font-family: 'Poppins', sans-serif;
+    font-family: 'Plus Jakarta Sans', 'Manrope', system-ui, -apple-system, sans-serif;
     overflow-x: hidden;
+    background-color: #ffffff;
+    color: #0f172a;
   }
 
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(59, 130, 246, 0.5) rgba(17, 24, 39, 0.5);
+    scrollbar-color: rgba(148, 163, 184, 0.6) rgba(226, 232, 240, 0.6);
   }
 
   *::-webkit-scrollbar {
@@ -21,21 +23,34 @@
   }
 
   *::-webkit-scrollbar-track {
-    background: rgba(17, 24, 39, 0.5);
+    background: rgba(226, 232, 240, 0.6);
     border-radius: 4px;
   }
 
   *::-webkit-scrollbar-thumb {
-    background: rgba(59, 130, 246, 0.5);
+    background: rgba(94, 129, 172, 0.5);
     border-radius: 4px;
   }
 
   *::-webkit-scrollbar-thumb:hover {
-    background: rgba(59, 130, 246, 0.7);
+    background: rgba(59, 130, 246, 0.6);
   }
 }
 
 @layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .bg-gradient-radial {
+    background: radial-gradient(circle, var(--tw-gradient-stops));
+  }
+
   .neon-glow {
     filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.8));
   }

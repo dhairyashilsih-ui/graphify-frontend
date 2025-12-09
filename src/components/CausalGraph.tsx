@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import * as d3 from 'd3';
+import { select } from 'd3-selection';
+import { zoom as d3Zoom, zoomTransform } from 'd3-zoom';
+import { scaleOrdinal } from 'd3-scale';
+import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from 'd3-force';
+import { drag as d3Drag } from 'd3-drag';
 import { motion } from 'framer-motion';
 import { Network, Maximize2, Minimize2, Download } from 'lucide-react';
 
@@ -53,7 +57,7 @@ export default function CausalGraph({ nodes, links, onNodeClick, className = '' 
   useEffect(() => {
     if (!svgRef.current || nodes.length === 0) return;
 
-    const svg = d3.select(svgRef.current);
+    const svg = select(svgRef.current);
     svg.selectAll('*').remove();
 
     const { width, height } = dimensions;
@@ -62,7 +66,7 @@ export default function CausalGraph({ nodes, links, onNodeClick, className = '' 
     const g = svg.append('g');
 
     // Add zoom behavior
-    const zoom = d3.zoom<SVGSVGElement, unknown>()
+    const zoom = d3Zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.1, 4])
       .on('zoom', (event) => {
         g.attr('transform', event.transform);
@@ -71,7 +75,7 @@ export default function CausalGraph({ nodes, links, onNodeClick, className = '' 
     svg.call(zoom);
 
     // Color scheme with gradients - more vibrant
-    const colorScale = d3.scaleOrdinal<string>()
+    const colorScale = scaleOrdinal<string>()
       .domain(['entity', 'concept', 'action', 'result'])
       .range(['#60a5fa', '#a78bfa', '#f472b6', '#34d399']);
 
@@ -84,14 +88,14 @@ export default function CausalGraph({ nodes, links, onNodeClick, className = '' 
     };
 
     // Create force simulation - more spread out
-    const simulation = d3.forceSimulation<GraphNode>(nodes)
-      .force('link', d3.forceLink<GraphNode, GraphLink>(links)
+    const simulation = forceSimulation<GraphNode>(nodes)
+      .force('link', forceLink<GraphNode, GraphLink>(links)
         .id(d => d.id)
         .distance(120)
         .strength(d => d.strength))
-      .force('charge', d3.forceManyBody().strength(-400))
-      .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(60));
+      .force('charge', forceManyBody().strength(-400))
+      .force('center', forceCenter(width / 2, height / 2))
+      .force('collision', forceCollide().radius(60));
 
     // Create arrow markers for directed edges
     const defs = svg.append('defs');
@@ -136,7 +140,7 @@ export default function CausalGraph({ nodes, links, onNodeClick, className = '' 
       .selectAll('g')
       .data(nodes)
       .join('g')
-      .call(d3.drag<SVGGElement, GraphNode>()
+      .call(d3Drag<SVGGElement, GraphNode>()
         .on('start', dragstarted)
         .on('drag', dragged)
         .on('end', dragended) as any);
