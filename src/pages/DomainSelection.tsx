@@ -134,7 +134,7 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
   const conversationHistory = useRef<GroqMessage[]>([
     {
       role: 'system',
-      content: 'You are Graphify — a friendly, smart AI that remembers context and thinks in connections.You keep data of user which is below given read that. You speak like a helpful human, keep answers simple, and always respond with clarity and warmth. You help users choose the right domain for their needs. Available domains: Agriculture, Health, Education, Finance, Transport, and Universal AI.'
+      content: 'You are Graphify — a friendly, smart AI that remembers context and thinks in connections.You keep data of user which is below given read that and always use user deails in answers if have. You speak like a helpful human, keep answers simple, and always respond with clarity and warmth. You help users choose the right domain for their needs. Available domains: Agriculture, Health, Education, Finance, Transport, and Universal AI.'
     }
   ]);
 
@@ -719,6 +719,15 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
                   <div
                     className="absolute inset-[-10%] bg-gradient-to-br from-transparent via-white/35 to-transparent"
                     style={{ mixBlendMode: 'screen' }}
+                  />
+
+                  {/* Falcon icon in center */}
+                  <img
+                    src="/homeora.svg"
+                    alt="Graphify Falcon Icon"
+                    className="absolute w-[34%] max-w-[140px] opacity-90 drop-shadow-lg"
+                    style={{ filter: 'drop-shadow(0 8px 14px rgba(15,23,42,0.18))' }}
+                    loading="lazy"
                   />
 
                   {/* Inner bevel - enhanced with sharper edges all around */}
