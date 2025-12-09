@@ -109,7 +109,12 @@ export default function Finance({ onBack }) {
           className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-0 mb-6 sm:mb-8"
         >
           <button
-            onClick={onBack}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onBack();
+            }}
             className="flex items-center gap-2 px-4 py-2 bg-white/70 hover:bg-white/90 text-slate-800 rounded-xl transition-colors shadow-md backdrop-blur-sm border border-amber-200"
           >
             <ArrowLeft className="w-5 h-5" />
