@@ -23,36 +23,75 @@ export class VoiceAssistant {
     onEnd?: () => void
   ): void {
     if (!this.recognition) {
-      console.error('Speech recognition not supported');
+      const errorMsg = 'Speech recognition not supported in this browser. Please use Chrome, Edge, or Safari.';
+      console.error(errorMsg);
+      onError?.(new Error(errorMsg));
       return;
     }
 
     if (this.isListening) {
+      console.warn('Already listening, ignoring duplicate start');
       return;
     }
 
     this.recognition.onstart = () => {
       this.isListening = true;
+      console.log('🎤 Listening started');
       onStart?.();
     };
 
     this.recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      onResult(transcript);
+      try {
+        const transcript = event.results[0][0].transcript;
+        if (transcript && transcript.trim()) {
+          console.log('📝 Transcript:', transcript);
+          onResult(transcript);
+        } else {
+          console.warn('Empty transcript received');
+        }
+      } catch (error: any) {
+        console.error('Error processing speech result:', error);
+        onError?.(error);
+      }
     };
 
     this.recognition.onerror = (event: any) => {
-      console.error('Speech recognition error:', event.error);
+      console.error('🎤 Speech recognition error:', event.error);
       this.isListening = false;
-      onError?.(event.error);
+      
+      // Provide user-friendly error messages
+      let userMessage = 'Voice recognition error';
+      switch (event.error) {
+        case 'no-speech':
+          userMessage = 'No speech detected. Please try again.';
+          break;
+        case 'audio-capture':
+          userMessage = 'Microphone not found. Please check your device.';
+          break;
+        case 'not-allowed':
+          userMessage = 'Microphone permission denied. Please allow microphone access.';
+          break;
+        case 'network':
+          userMessage = 'Network error. Please check your connection.';
+          break;
+      }
+      
+      onError?.(new Error(userMessage));
     };
 
     this.recognition.onend = () => {
       this.isListening = false;
+      console.log('🎤 Listening ended');
       onEnd?.();
     };
 
-    this.recognition.start();
+    try {
+      this.recognition.start();
+    } catch (error: any) {
+      console.error('Failed to start recognition:', error);
+      this.isListening = false;
+      onError?.(error);
+    }
   }
 
   stopListening(): void {

@@ -106,6 +106,29 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
   const mouseFrameRef = useRef<number | null>(null);
   const latestMouseRef = useRef({ x: 0, y: 0 });
   const prefersReducedMotion = useReducedMotion();
+  const [isScrolling, setIsScrolling] = useState(false);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Detect scrolling to pause heavy animations
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolling(true);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      scrollTimeoutRef.current = setTimeout(() => {
+        setIsScrolling(false);
+      }, 150);
+    };
+    
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
   
   // Mouse position tracking for parallax
   const conversationHistory = useRef<GroqMessage[]>([
@@ -235,9 +258,9 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
     return () => clearInterval(id);
   }, [isPaused]);
 
-  // Mouse move handler for parallax
+  // Mouse move handler for parallax (disabled on mobile for performance)
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current) return;
+    if (!cardRef.current || isMobile) return; // Disable on mobile
     const rect = cardRef.current.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
@@ -384,7 +407,8 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
           className="absolute inset-0"
           style={{
             background: 'radial-gradient(900px at 18% 24%, rgba(191,219,254,0.14), transparent 55%), radial-gradient(1100px at 82% 36%, rgba(148,163,184,0.12), transparent 60%)',
-            opacity: 0.7
+            opacity: 0.7,
+            willChange: 'auto'
           }}
         />
         {heroParticles.map((particle, index) => (
@@ -807,11 +831,11 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
           {/* Animated radial glow behind card */}
           <motion.div
             className="absolute inset-0 -z-10"
-            animate={prefersReducedMotion ? { opacity: 0.26, scale: 1 } : {
+            animate={(prefersReducedMotion || isScrolling) ? { opacity: 0.26, scale: 1 } : {
               opacity: [0.18, 0.32, 0.18],
               scale: [0.97, 1.03, 0.97],
             }}
-            transition={prefersReducedMotion ? { duration: 0 } : {
+            transition={(prefersReducedMotion || isScrolling) ? { duration: 0 } : {
               duration: 4.5,
               repeat: Infinity,
               ease: "easeInOut",
@@ -863,14 +887,14 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
             {/* Ambient gradient overlay */}
             <motion.div
               className="absolute inset-0 pointer-events-none"
-              animate={prefersReducedMotion ? { background: 'radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.08), transparent 55%)' } : {
+              animate={(prefersReducedMotion || isScrolling) ? { background: 'radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.08), transparent 55%)' } : {
                 background: [
                   'radial-gradient(circle at 30% 20%, rgba(99, 102, 241, 0.08), transparent 50%)',
                   'radial-gradient(circle at 70% 80%, rgba(139, 92, 246, 0.08), transparent 50%)',
                   'radial-gradient(circle at 30% 20%, rgba(99, 102, 241, 0.08), transparent 50%)',
                 ],
               }}
-              transition={prefersReducedMotion ? { duration: 0 } : { duration: 8, repeat: Infinity, ease: "easeInOut" }}
+              transition={(prefersReducedMotion || isScrolling) ? { duration: 0 } : { duration: 8, repeat: Infinity, ease: "easeInOut" }}
             />
 
             <div className="px-4 pt-10 pb-6 md:px-6 md:pt-14 md:pb-8 flex flex-col items-center gap-8 md:gap-10 relative">

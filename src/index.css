@@ -12,9 +12,35 @@
     color: #0f172a;
   }
 
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Performance optimizations */
   * {
     scrollbar-width: thin;
     scrollbar-color: rgba(148, 163, 184, 0.6) rgba(226, 232, 240, 0.6);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Disable heavy animations on mobile for better performance */
+  @media (max-width: 768px) {
+    * {
+      will-change: auto !important;
+    }
+  }
+
+  /* Respect user's motion preferences */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 
   *::-webkit-scrollbar {

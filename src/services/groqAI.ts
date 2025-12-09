@@ -15,6 +15,10 @@ export interface GroqMessage {
 
 export async function sendToGroq(messages: GroqMessage[]): Promise<string> {
   try {
+    if (!apiKey) {
+      throw new Error('GROQ API key is missing. Please add VITE_GROQ_API_KEY to your environment variables.');
+    }
+
     const chatCompletion = await groq.chat.completions.create({
       messages: messages,
       model: 'llama-3.1-8b-instant',
@@ -23,15 +27,36 @@ export async function sendToGroq(messages: GroqMessage[]): Promise<string> {
       stream: false,
     });
 
-    return chatCompletion.choices[0]?.message?.content || 'Sorry, I could not generate a response.';
-  } catch (error) {
+    const content = chatCompletion.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('No response content received from Groq API');
+    }
+
+    return content;
+  } catch (error: any) {
     console.error('Groq API Error:', error);
-    throw error;
+    
+    // Handle specific error types
+    if (error.message?.includes('API key')) {
+      throw new Error('Invalid API key. Please check your Groq API key.');
+    }
+    if (error.message?.includes('rate limit')) {
+      throw new Error('Rate limit exceeded. Please try again in a moment.');
+    }
+    if (error.message?.includes('network') || error.name === 'TypeError') {
+      throw new Error('Network error. Please check your internet connection.');
+    }
+    
+    throw new Error(`AI service error: ${error.message || 'Unknown error occurred'}`);
   }
 }
 
 export async function sendToGroqJSON(messages: GroqMessage[]): Promise<string> {
   try {
+    if (!apiKey) {
+      throw new Error('GROQ API key is missing. Please add VITE_GROQ_API_KEY to your environment variables.');
+    }
+
     const chatCompletion = await groq.chat.completions.create({
       messages: messages,
       model: 'llama-3.1-8b-instant',
@@ -41,10 +66,33 @@ export async function sendToGroqJSON(messages: GroqMessage[]): Promise<string> {
       response_format: { type: 'json_object' }
     });
 
-    return chatCompletion.choices[0]?.message?.content || '{}';
-  } catch (error) {
-    console.error('Groq API Error:', error);
-    throw error;
+    const content = chatCompletion.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('No JSON response received from Groq API');
+    }
+
+    // Validate JSON
+    try {
+      JSON.parse(content);
+    } catch {
+      throw new Error('Invalid JSON response from API');
+    }
+
+    return content;
+  } catch (error: any) {
+    console.error('Groq API JSON Error:', error);
+    
+    if (error.message?.includes('API key')) {
+      throw new Error('Invalid API key. Please check your Groq API key.');
+    }
+    if (error.message?.includes('rate limit')) {
+      throw new Error('Rate limit exceeded. Please try again in a moment.');
+    }
+    if (error.message?.includes('network') || error.name === 'TypeError') {
+      throw new Error('Network error. Please check your internet connection.');
+    }
+    
+    throw new Error(`AI service error: ${error.message || 'Unknown error occurred'}`);
   }
 }
 
