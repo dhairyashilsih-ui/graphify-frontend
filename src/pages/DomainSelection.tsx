@@ -721,15 +721,6 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
                     style={{ mixBlendMode: 'screen' }}
                   />
 
-                  {/* Falcon icon in center */}
-                  <img
-                    src="/homeora.svg"
-                    alt="Graphify Falcon Icon"
-                    className="absolute w-[34%] max-w-[140px] opacity-90 drop-shadow-lg"
-                    style={{ filter: 'drop-shadow(0 8px 14px rgba(15,23,42,0.18))' }}
-                    loading="lazy"
-                  />
-
                   {/* Inner bevel - enhanced with sharper edges all around */}
                   <div
                     className="absolute inset-[18%] rounded-full border border-white/80"
