@@ -1,4 +1,5 @@
 import { GraphNode, GraphLink } from '../components/CausalGraph';
+import { validateReasoningResponse } from '../utils/reasoningValidator';
 
 const BACKEND_URL = 'http://localhost:3001';
 
@@ -6,176 +7,48 @@ interface CausalExtractionResponse {
   nodes: GraphNode[];
   links: GraphLink[];
   summary: string;
+  unavailable?: boolean;
 }
 
-function generateBasicGraph(prompt: string, response: string, domain: string): CausalExtractionResponse {
-  // Create a simple graph from the query and response
-  const queryNode: GraphNode = {
-    id: 'query-' + Date.now(),
-    label: prompt.substring(0, 30),
-    type: 'entity'
-  };
-  
-  const analysisNode: GraphNode = {
-    id: 'analysis-' + Date.now(),
-    label: `${domain} Analysis`,
-    type: 'action'
-  };
-  
-  const resultNode: GraphNode = {
-    id: 'result-' + Date.now(),
-    label: response.substring(0, 30) + '...',
-    type: 'result'
-  };
-  
-  return {
-    nodes: [queryNode, analysisNode, resultNode],
-    links: [
-      { source: queryNode.id, target: analysisNode.id, type: 'causes', strength: 0.9 },
-      { source: analysisNode.id, target: resultNode.id, type: 'causes', strength: 0.9 }
-    ],
-    summary: `Query processed through ${domain} analysis`
-  };
+function isValidGraph(graph: any): graph is CausalExtractionResponse {
+  if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.links)) return false;
+  if (graph.nodes.length === 0 || graph.links.length === 0) return false;
+  const nodesValid = graph.nodes.every((n: any) => typeof n.id === 'string' && typeof n.label === 'string');
+  const linksValid = graph.links.every((l: any) => l && (typeof l.source === 'string' || typeof l.source?.id === 'string') && (typeof l.target === 'string' || typeof l.target?.id === 'string'));
+  return nodesValid && linksValid;
 }
 
-function parseCausalRelationshipsFromBackend(backendData: any, domain: string): CausalExtractionResponse {
-  const nodes: GraphNode[] = [];
+function buildGraphFromRelationships(relationships: any[]): CausalExtractionResponse {
+  const nodesMap = new Map<string, GraphNode>();
   const links: GraphLink[] = [];
-  
-  // Create a central hub node for the query
-  const hubId = 'query-hub';
-  nodes.push({
-    id: hubId,
-    label: `${domain.charAt(0).toUpperCase() + domain.slice(1)} Analysis`,
-    type: 'concept'
+
+  relationships.forEach((rel, idx) => {
+    const source = rel.source || rel.cause;
+    const target = rel.target || rel.effect;
+    if (!source || !target) return;
+
+    const sourceId = String(source);
+    const targetId = String(target);
+
+    if (!nodesMap.has(sourceId)) {
+      nodesMap.set(sourceId, { id: sourceId, label: String(rel.source_label || source), type: rel.source_type || 'entity' });
+    }
+    if (!nodesMap.has(targetId)) {
+      nodesMap.set(targetId, { id: targetId, label: String(rel.target_label || target), type: rel.target_type || 'result' });
+    }
+
+    links.push({
+      source: sourceId,
+      target: targetId,
+      type: rel.type || rel.relation || 'causes',
+      strength: typeof rel.strength === 'number' ? Math.max(0, Math.min(1, rel.strength)) : 0.7
+    });
   });
-  
-  // Parse causal relationships and connect to hub
-  if (backendData.causal_relationships && Array.isArray(backendData.causal_relationships)) {
-    backendData.causal_relationships.forEach((rel: any, index: number) => {
-      const causeText = rel.cause || rel.source || 'Unknown Cause';
-      const effectText = rel.effect || rel.target || 'Unknown Effect';
-      
-      const causeId = `cause-${index}`;
-      const effectId = `effect-${index}`;
-      
-      nodes.push({
-        id: causeId,
-        label: causeText.substring(0, 20),
-        type: 'entity'
-      });
-      
-      nodes.push({
-        id: effectId,
-        label: effectText.substring(0, 20),
-        type: 'result'
-      });
-      
-      // Connect cause to hub
-      if (index === 0) {
-        links.push({
-          source: hubId,
-          target: causeId,
-          type: 'relates',
-          strength: 0.9
-        });
-      }
-      
-      // Main causal link
-      links.push({
-        source: causeId,
-        target: effectId,
-        type: 'causes',
-        strength: rel.strength || 0.8
-      });
-      
-      // Chain effects together
-      if (index > 0) {
-        links.push({
-          source: `effect-${index - 1}`,
-          target: causeId,
-          type: 'influences',
-          strength: 0.6
-        });
-      }
-    });
-  }
-  
-  // Add insights and connect to hub or last effect
-  if (backendData.insights && Array.isArray(backendData.insights)) {
-    const lastEffectId = backendData.causal_relationships?.length > 0 
-      ? `effect-${backendData.causal_relationships.length - 1}` 
-      : hubId;
-    
-    backendData.insights.forEach((insight: string, index: number) => {
-      const insightId = `insight-${index}`;
-      nodes.push({
-        id: insightId,
-        label: insightText.substring(0, 20),
-        type: 'concept'
-      });
-      
-      // Connect to the graph
-      if (index === 0) {
-        links.push({
-          source: lastEffectId,
-          target: insightId,
-          type: 'relates',
-          strength: 0.7
-        });
-      } else {
-        links.push({
-          source: `insight-${index - 1}`,
-          target: insightId,
-          type: 'relates',
-          strength: 0.6
-        });
-      }
-    });
-  }
-  
-  // Add recommendations and connect to insights
-  if (backendData.recommendations && Array.isArray(backendData.recommendations)) {
-    backendData.recommendations.forEach((rec: string, index: number) => {
-      const recId = `action-${index}`;
-      nodes.push({
-        id: recId,
-        label: rec.substring(0, 20),
-        type: 'action'
-      });
-      
-      // Connect to insights or hub
-      const sourceId = backendData.insights?.length > index 
-        ? `insight-${index}` 
-        : (backendData.insights?.length > 0 ? `insight-${backendData.insights.length - 1}` : hubId);
-      
-      links.push({
-        source: sourceId,
-        target: recId,
-        type: 'influences',
-        strength: 0.8
-      });
-    });
-  }
-  
-  // Final safety: if we only have hub, create chain
-  if (nodes.length === 1) {
-    nodes.push(
-      { id: 'n1', label: 'Query Input', type: 'entity' },
-      { id: 'n2', label: 'AI Processing', type: 'action' },
-      { id: 'n3', label: 'Analysis Result', type: 'result' }
-    );
-    links.push(
-      { source: hubId, target: 'n1', type: 'relates', strength: 0.8 },
-      { source: 'n1', target: 'n2', type: 'causes', strength: 0.9 },
-      { source: 'n2', target: 'n3', type: 'causes', strength: 0.9 }
-    );
-  }
-  
+
   return {
-    nodes,
+    nodes: Array.from(nodesMap.values()),
     links,
-    summary: `Connected ${domain} graph with ${nodes.length} nodes and ${links.length} relationships`
+    summary: relationships.length ? 'Causal relationships extracted from backend response' : 'No relationships provided'
   };
 }
 
@@ -185,28 +58,16 @@ export async function extractCausalRelationships(
   domain: string
 ): Promise<CausalExtractionResponse> {
   try {
-    // Create a concise extraction prompt to avoid token limits
-    const extractionPrompt = `Extract a causal graph from this query: "${prompt}"
-
-Create a JSON graph showing relationships:
-{
-  "nodes": [{"id": "node1", "label": "Label", "type": "entity|concept|action|result"}],
-  "links": [{"source": "node1", "target": "node2", "type": "causes|relates|influences|depends", "strength": 0.9}],
-  "summary": "Brief summary"
-}
-
-Focus on key entities and relationships from the query.`;
-
-    // Use the backend API which has working Gemini integration
     const apiResponse = await fetch(`${BACKEND_URL}/api/analyze`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        query: extractionPrompt,
-        domain: 'universal-ai',
-        generateTTS: false
+        query: response || prompt,
+        domain,
+        generateTTS: false,
+        returnGraph: true
       })
     });
 
@@ -217,43 +78,67 @@ Focus on key entities and relationships from the query.`;
     }
 
     const data = await apiResponse.json();
-    
+
     console.log('🔍 Backend response:', data);
-    
-    // Check if backend already provided causal relationships
-    if (data.data?.causal_relationships && Array.isArray(data.data.causal_relationships)) {
-      return parseCausalRelationshipsFromBackend(data.data, domain);
-    }
-    
-    const generatedText = data.analysis?.response || data.data?.summary || data.data?.insights?.join('\n') || '';
-    
-    console.log('📝 Generated text:', generatedText);
-    
-    // Extract JSON from the response (handle markdown code blocks)
-    const jsonMatch = generatedText.match(/```json\n?([\s\S]*?)\n?```/) || 
-                      generatedText.match(/\{[\s\S]*\}/);
-    
-    if (!jsonMatch) {
-      console.warn('No JSON found in response, generating graph from backend data');
-      // Use backend data if available
-      if (data.data) {
-        return parseCausalRelationshipsFromBackend(data.data, domain);
+
+    const rawModel =
+      data?.data?.raw_model_output ||
+      data?.data?.raw ||
+      data?.raw_response ||
+      data?.rawResponse ||
+      undefined;
+
+    if (typeof rawModel === 'string') {
+      const validation = validateReasoningResponse(rawModel);
+      if (!validation.ok) {
+        console.warn('Reasoning validation failed for causal analysis:', { error: validation.error, snippet: validation.debugSnippet });
+        return {
+          nodes: [],
+          links: [],
+          summary: validation.error || 'Reasoning format error, please try again.',
+          unavailable: true
+        };
       }
-      return generateBasicGraph(prompt, response, domain);
+
+      if (validation.data?.causal_graph && validation.data.causal_graph.nodes.length && validation.data.causal_graph.links.length) {
+        return {
+          nodes: validation.data.causal_graph.nodes,
+          links: validation.data.causal_graph.links,
+          summary: 'Causal graph returned by validated model output'
+        };
+      }
     }
 
-    const jsonText = jsonMatch[1] || jsonMatch[0];
-    const extracted: CausalExtractionResponse = JSON.parse(jsonText);
+    // Preferred: backend supplies a causal_graph with nodes/links
+    const backendGraph = data?.data?.causal_graph || data?.causal_graph;
+    if (backendGraph) {
+      if (isValidGraph(backendGraph)) {
+        return {
+          nodes: backendGraph.nodes,
+          links: backendGraph.links,
+          summary: backendGraph.summary || 'Causal graph returned by backend'
+        };
+      }
+      return {
+        nodes: [],
+        links: [],
+        summary: 'Reasoning format error, please try again.',
+        unavailable: true
+      };
+    }
 
-    // Validate and ensure unique IDs
-    const nodeIds = new Set(extracted.nodes.map(n => n.id));
-    extracted.links = extracted.links.filter(link => {
-      const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
-      const targetId = typeof link.target === 'string' ? link.target : link.target.id;
-      return nodeIds.has(sourceId) && nodeIds.has(targetId);
-    });
+    // Secondary: backend supplies causal_relationships (source/target pairs)
+    if (Array.isArray(data?.data?.causal_relationships)) {
+      return buildGraphFromRelationships(data.data.causal_relationships);
+    }
 
-    return extracted;
+    // No trustworthy structured graph available
+    return {
+      nodes: [],
+      links: [],
+      summary: 'Graph unavailable: backend did not return a structured causal graph.',
+      unavailable: true
+    };
   } catch (error) {
     console.error('Error extracting causal relationships:', error);
     
@@ -261,7 +146,8 @@ Focus on key entities and relationships from the query.`;
     return {
       nodes: [],
       links: [],
-      summary: 'Failed to extract causal relationships. Please try again.'
+      summary: 'Graph unavailable: failed to extract causal relationships.',
+      unavailable: true
     };
   }
 }
@@ -274,6 +160,16 @@ export async function buildIncrementalGraph(
   domain: string
 ): Promise<CausalExtractionResponse> {
   const newGraph = await extractCausalRelationships(newPrompt, newResponse, domain);
+
+  // If new graph is unavailable, keep existing graph but update summary
+  if (newGraph.unavailable) {
+    return {
+      nodes: existingNodes,
+      links: existingLinks,
+      summary: newGraph.summary,
+      unavailable: true
+    };
+  }
   
   // Merge with existing graph
   const nodeMap = new Map(existingNodes.map(n => [n.id, n]));

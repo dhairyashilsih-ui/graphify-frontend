@@ -55,27 +55,30 @@ export default function GraphRenderer({
     const actualWidth = dimensions.width;
     const actualHeight = dimensions.height;
     
-    // CLEAR EVERYTHING
-    svg.selectAll('*').remove();
-    
     // Stop existing simulation
     if (simulationRef.current) {
       simulationRef.current.stop();
     }
 
+    // Remove render layers but keep defs for reuse
+    svg.selectAll('g.render-layer').remove();
+    svg.selectAll('text.simplify-badge').remove();
+
     // RESPONSIVE NODE RADIUS
     const nodeRadius = isMobile 
-      ? Math.max(35, Math.min(actualWidth, actualHeight) * 0.06)
-      : Math.max(45, Math.min(actualWidth, actualHeight) * 0.055);
+      ? Math.max(30, Math.min(actualWidth, actualHeight) * 0.055)
+      : Math.max(40, Math.min(actualWidth, actualHeight) * 0.05);
     
     const margin = isMobile ? 40 : 80;
 
-    // Deep copy nodes and edges
-    const nodes = graphData.nodes.map(n => ({ ...n }));
+    // Deep copy nodes and edges with guardrails
+    const MAX_NODES = 120;
+    const MAX_EDGES = 320;
+    const nodes = graphData.nodes.slice(0, MAX_NODES).map(n => ({ ...n }));
     
     // Validate and filter edges
     const nodeIds = new Set(nodes.map(n => n.id));
-    const edges = (graphData.edges || [])
+    let edges = (graphData.edges || [])
       .filter(e => {
         const sourceExists = nodeIds.has(e.source) || nodeIds.has(e.source.id);
         const targetExists = nodeIds.has(e.target) || nodeIds.has(e.target.id);
@@ -83,91 +86,112 @@ export default function GraphRenderer({
       })
       .map(e => ({ ...e }));
 
+    if (edges.length > MAX_EDGES) {
+      edges = edges.slice(0, MAX_EDGES);
+    }
+
+    const simplified = graphData.nodes.length > nodes.length || (graphData.edges?.length || 0) > edges.length;
+
     // ===== DEFS: Filters, Gradients, Markers =====
-    const defs = svg.append('defs');
+    let defs = svg.select('defs');
+    if (defs.empty()) {
+      defs = svg.append('defs');
+    }
 
     // NEON GLOW FILTER - Reduced intensity on mobile
     const glowStdDev = isMobile ? '2' : '4';
-    const glowFilter = defs.append('filter')
-      .attr('id', `neon-glow-${graphVersion}`)
-      .attr('x', '-50%')
-      .attr('y', '-50%')
-      .attr('width', '200%')
-      .attr('height', '200%');
+    let glowFilter = defs.select(`#neon-glow-${graphVersion}`);
+    if (glowFilter.empty()) {
+      glowFilter = defs.append('filter')
+        .attr('id', `neon-glow-${graphVersion}`)
+        .attr('x', '-50%')
+        .attr('y', '-50%')
+        .attr('width', '200%')
+        .attr('height', '200%');
 
-    glowFilter.append('feGaussianBlur')
-      .attr('in', 'SourceGraphic')
-      .attr('stdDeviation', glowStdDev)
-      .attr('result', 'blur');
+      glowFilter.append('feGaussianBlur')
+        .attr('in', 'SourceGraphic')
+        .attr('stdDeviation', glowStdDev)
+        .attr('result', 'blur');
 
-    glowFilter.append('feColorMatrix')
-      .attr('in', 'blur')
-      .attr('type', 'matrix')
-      .attr('values', '0 0 0 0 0.23  0 0 0 0 1  0 0 0 0 0.9  0 0 0 1 0')
-      .attr('result', 'glow');
+      glowFilter.append('feColorMatrix')
+        .attr('in', 'blur')
+        .attr('type', 'matrix')
+        .attr('values', '0 0 0 0 0.23  0 0 0 0 1  0 0 0 0 0.9  0 0 0 1 0')
+        .attr('result', 'glow');
 
-    const feMerge = glowFilter.append('feMerge');
-    feMerge.append('feMergeNode').attr('in', 'glow');
-    feMerge.append('feMergeNode').attr('in', isMobile ? 'SourceGraphic' : 'glow');
-    feMerge.append('feMergeNode').attr('in', isMobile ? 'SourceGraphic' : 'glow');
-    feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+      const feMerge = glowFilter.append('feMerge');
+      feMerge.append('feMergeNode').attr('in', 'glow');
+      feMerge.append('feMergeNode').attr('in', isMobile ? 'SourceGraphic' : 'glow');
+      feMerge.append('feMergeNode').attr('in', isMobile ? 'SourceGraphic' : 'glow');
+      feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+    }
 
     // SHADOW FILTER
-    const shadowFilter = defs.append('filter')
-      .attr('id', `drop-shadow-${graphVersion}`)
-      .attr('height', '130%');
+    let shadowFilter = defs.select(`#drop-shadow-${graphVersion}`);
+    if (shadowFilter.empty()) {
+      shadowFilter = defs.append('filter')
+        .attr('id', `drop-shadow-${graphVersion}`)
+        .attr('height', '130%');
 
-    shadowFilter.append('feGaussianBlur')
-      .attr('in', 'SourceAlpha')
-      .attr('stdDeviation', isMobile ? '2' : '3');
+      shadowFilter.append('feGaussianBlur')
+        .attr('in', 'SourceAlpha')
+        .attr('stdDeviation', isMobile ? '2' : '3');
 
-    shadowFilter.append('feOffset')
-      .attr('dx', '0')
-      .attr('dy', isMobile ? '1' : '2')
-      .attr('result', 'offsetblur');
+      shadowFilter.append('feOffset')
+        .attr('dx', '0')
+        .attr('dy', isMobile ? '1' : '2')
+        .attr('result', 'offsetblur');
 
-    shadowFilter.append('feComponentTransfer')
-      .append('feFuncA')
-      .attr('type', 'linear')
-      .attr('slope', '0.4');
+      shadowFilter.append('feComponentTransfer')
+        .append('feFuncA')
+        .attr('type', 'linear')
+        .attr('slope', '0.4');
 
-    const feMerge2 = shadowFilter.append('feMerge');
-    feMerge2.append('feMergeNode');
-    feMerge2.append('feMergeNode').attr('in', 'SourceGraphic');
+      const feMerge2 = shadowFilter.append('feMerge');
+      feMerge2.append('feMergeNode');
+      feMerge2.append('feMergeNode').attr('in', 'SourceGraphic');
+    }
 
     // RADIAL GRADIENT FOR NODES
-    const gradient = defs.append('radialGradient')
-      .attr('id', `node-gradient-${graphVersion}`);
-    gradient.append('stop')
-      .attr('offset', '0%')
-      .attr('stop-color', '#3AFFE5')
-      .attr('stop-opacity', '1');
-    gradient.append('stop')
-      .attr('offset', '50%')
-      .attr('stop-color', '#22D3EE')
-      .attr('stop-opacity', '0.9');
-    gradient.append('stop')
-      .attr('offset', '100%')
-      .attr('stop-color', '#0891B2')
-      .attr('stop-opacity', '0.8');
+    let gradient = defs.select(`#node-gradient-${graphVersion}`);
+    if (gradient.empty()) {
+      gradient = defs.append('radialGradient')
+        .attr('id', `node-gradient-${graphVersion}`);
+      gradient.append('stop')
+        .attr('offset', '0%')
+        .attr('stop-color', '#3AFFE5')
+        .attr('stop-opacity', '1');
+      gradient.append('stop')
+        .attr('offset', '50%')
+        .attr('stop-color', '#22D3EE')
+        .attr('stop-opacity', '0.9');
+      gradient.append('stop')
+        .attr('offset', '100%')
+        .attr('stop-color', '#0891B2')
+        .attr('stop-opacity', '0.8');
+    }
 
     // PROFESSIONAL ARROW MARKER - Responsive size
     const markerSize = isMobile ? 6 : 8;
-    defs.append('marker')
-      .attr('id', `arrowhead-${graphVersion}`)
-      .attr('viewBox', '0 0 10 10')
-      .attr('refX', 10)
-      .attr('refY', 5)
-      .attr('markerWidth', markerSize)
-      .attr('markerHeight', markerSize)
-      .attr('orient', 'auto')
-      .append('path')
-      .attr('d', 'M 0 0 L 10 5 L 0 10 z')
-      .attr('fill', '#3AFFE5')
-      .attr('opacity', 0.9);
+    let marker = defs.select(`#arrowhead-${graphVersion}`);
+    if (marker.empty()) {
+      marker = defs.append('marker')
+        .attr('id', `arrowhead-${graphVersion}`)
+        .attr('viewBox', '0 0 10 10')
+        .attr('refX', 10)
+        .attr('refY', 5)
+        .attr('markerWidth', markerSize)
+        .attr('markerHeight', markerSize)
+        .attr('orient', 'auto');
+      marker.append('path')
+        .attr('d', 'M 0 0 L 10 5 L 0 10 z')
+        .attr('fill', '#3AFFE5')
+        .attr('opacity', 0.9);
+    }
 
     // Create container group
-    const g = svg.append('g');
+    const g = svg.append('g').attr('class', 'render-layer');
 
     // Zoom behavior - adjusted for mobile
     const zoomBehavior = zoom()
@@ -193,7 +217,7 @@ export default function GraphRenderer({
     const linkDistance = isMobile 
       ? (isTreeLayout ? 100 : 80)
       : (isTreeLayout ? 150 : 120);
-    const chargeStrength = isMobile ? -400 : (isTreeLayout ? -800 : -600);
+    const chargeStrength = simplified ? -200 : (isMobile ? -400 : (isTreeLayout ? -800 : -600));
     
     const simulation = forceSimulation(nodes)
       .force('link', forceLink(edges)
@@ -202,7 +226,7 @@ export default function GraphRenderer({
         .strength(isTreeLayout ? 0.1 : 0.5))
       .force('charge', forceManyBody().strength(isTreeLayout ? -400 : chargeStrength))
       .force('center', forceCenter(actualWidth / 2, actualHeight / 2))
-      .force('collision', forceCollide().radius(nodeRadius + (isMobile ? 15 : 25)))
+      .force('collision', forceCollide().radius((simplified ? nodeRadius * 0.65 : nodeRadius) + (isMobile ? 12 : 20)))
       .force('x', forceX(actualWidth / 2).strength(isTreeLayout ? 0 : 0.05))
       .force('y', forceY(actualHeight / 2).strength(isTreeLayout ? 0 : 0.05))
       .force('boundary', boundaryForce());
@@ -221,12 +245,12 @@ export default function GraphRenderer({
       .enter()
       .append('line')
       .attr('stroke', '#3AFFE5')
-      .attr('stroke-width', isMobile ? 2 : 2.5)
+      .attr('stroke-width', simplified ? (isMobile ? 1.4 : 1.8) : (isMobile ? 2 : 2.5))
       .attr('stroke-opacity', enableAnimation ? 0 : 0.6)
-      .attr('marker-end', `url(#arrowhead-${graphVersion})`);
+      .attr('marker-end', simplified ? null : `url(#arrowhead-${graphVersion})`);
 
     // Arrow growth animation - faster on mobile
-    if (enableAnimation) {
+    if (enableAnimation && !simplified) {
       edgeElements.transition()
         .delay((d, i) => i * (isMobile ? 100 : 150))
         .duration(isMobile ? 400 : 600)
@@ -245,11 +269,11 @@ export default function GraphRenderer({
 
     // Node circles with premium styling
     nodeElements.append('circle')
-      .attr('r', nodeRadius)
-      .attr('fill', `url(#node-gradient-${graphVersion})`)
+      .attr('r', simplified ? nodeRadius * 0.8 : nodeRadius)
+      .attr('fill', simplified ? '#1f9cb5' : `url(#node-gradient-${graphVersion})`)
       .attr('stroke', '#3AFFE5')
       .attr('stroke-width', isMobile ? 2 : 3)
-      .attr('filter', `url(#neon-glow-${graphVersion})`)
+      .attr('filter', simplified ? null : `url(#neon-glow-${graphVersion})`)
       .style('cursor', 'pointer');
 
     // RESPONSIVE FONT SIZE for node labels
@@ -310,7 +334,7 @@ export default function GraphRenderer({
       });
 
     // Fade-in animation for nodes - faster on mobile
-    if (enableAnimation) {
+    if (enableAnimation && !simplified) {
       nodeElements.transition()
         .delay((d, i) => i * (isMobile ? 60 : 80))
         .duration(isMobile ? 400 : 500)
@@ -373,6 +397,17 @@ export default function GraphRenderer({
     // Auto-zoom to fit if specified OR for tree layout
     if (graphData.autoZoom || isTreeLayout) {
       simulation.on('end', autoFitGraph);
+    }
+
+    if (simplified) {
+      svg.append('text')
+        .attr('class', 'simplify-badge')
+        .attr('x', actualWidth - 10)
+        .attr('y', actualHeight - 10)
+        .attr('text-anchor', 'end')
+        .attr('fill', 'rgba(255,255,255,0.75)')
+        .attr('font-size', 10)
+        .text('Simplified for performance');
     }
 
     // Fade in SVG

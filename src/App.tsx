@@ -29,25 +29,64 @@ function App() {
       <AnimatePresence mode="wait">
         <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-32 w-32 border-b-2 border-white"></div></div>}>
           {currentPage === 'domains' && (
-            <DomainSelection key="domains" onSelectDomain={(domain) => setCurrentPage(domain as Page)} />
+            <DomainSelection
+              key="domains"
+              onSelectDomain={(domain) => setCurrentPage(domain as Page)}
+            />
           )}
           {currentPage === 'agriculture' && (
-            <Agriculture key="agriculture" onBack={() => setCurrentPage('domains')} />
+            <Agriculture
+              key="agriculture"
+              onBack={() => {
+                sessionStorage.setItem('fusion_returning_from_domain', 'true');
+                setCurrentPage('domains');
+              }}
+            />
           )}
           {currentPage === 'health' && (
-            <Health key="health" onBack={() => setCurrentPage('domains')} />
+            <Health
+              key="health"
+              onBack={() => {
+                sessionStorage.setItem('fusion_returning_from_domain', 'true');
+                setCurrentPage('domains');
+              }}
+            />
           )}
           {currentPage === 'education' && (
-            <Education key="education" onBack={() => setCurrentPage('domains')} />
+            <Education
+              key="education"
+              onBack={() => {
+                sessionStorage.setItem('fusion_returning_from_domain', 'true');
+                setCurrentPage('domains');
+              }}
+            />
           )}
           {currentPage === 'finance' && (
-            <Finance key="finance" onBack={() => setCurrentPage('domains')} />
+            <Finance
+              key="finance"
+              onBack={() => {
+                sessionStorage.setItem('fusion_returning_from_domain', 'true');
+                setCurrentPage('domains');
+              }}
+            />
           )}
           {currentPage === 'transport' && (
-            <Transport key="transport" onBack={() => setCurrentPage('domains')} />
+            <Transport
+              key="transport"
+              onBack={() => {
+                sessionStorage.setItem('fusion_returning_from_domain', 'true');
+                setCurrentPage('domains');
+              }}
+            />
           )}
           {currentPage === 'universal-ai' && (
-            <UniversalAI key="universal-ai" onBack={() => setCurrentPage('domains')} />
+            <UniversalAI
+              key="universal-ai"
+              onBack={() => {
+                sessionStorage.setItem('fusion_returning_from_domain', 'true');
+                setCurrentPage('domains');
+              }}
+            />
           )}
         </Suspense>
       </AnimatePresence>

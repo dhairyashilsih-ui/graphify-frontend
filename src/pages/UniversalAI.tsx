@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Send, Sparkles, Loader2 } from 'lucide-react';
 import { sendToGroqJSON } from '../services/groqAI';
 import { generateReasoningPrompt, parseReasoningResponse } from '../utils/graphGenerator';
 import { useReasoningPlayer } from '../hooks/useReasoningPlayer';
 import GraphRenderer from '../components/GraphRenderer';
+import { generateSessionId, getStoredSessionId, setStoredSessionId } from '../services/mongodb';
 
 export default function UniversalAI({ onBack }) {
   const [inputText, setInputText] = useState('');
@@ -12,6 +13,9 @@ export default function UniversalAI({ onBack }) {
   const [showReasoning, setShowReasoning] = useState(false);
   const [steps, setSteps] = useState([]);
   const [finalAnswer, setFinalAnswer] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const sessionIdRef = useRef<string>('');
+  const historyRef = useRef<Array<{ q: string; a: string }>>([]);
 
   const {
     currentStepIndex,
@@ -27,15 +31,27 @@ export default function UniversalAI({ onBack }) {
   } = useReasoningPlayer();
 
   useEffect(() => {
+    sessionIdRef.current = getStoredSessionId() || generateSessionId();
+    setStoredSessionId(sessionIdRef.current);
     return () => cleanup();
   }, [cleanup]);
 
   const fetchReasoning = async (question) => {
     try {
-      const prompt = generateReasoningPrompt(question, 'universal');
-      const response = await sendToGroqJSON(prompt);
+      const context = historyRef.current
+        .slice(-5)
+        .map((t, idx) => `${idx + 1}. Q: ${t.q}\nA: ${t.a}`)
+        .join('\n');
+
+      const prompt = generateReasoningPrompt(question, 'universal', context);
+      const response = await sendToGroqJSON(prompt, { sessionId: sessionIdRef.current });
       const data = parseReasoningResponse(response);
       
+      historyRef.current = [
+        ...historyRef.current,
+        { q: question, a: data.final_answer || data.steps?.map((s: any) => s.title).join(' ') || 'Answer recorded' }
+      ].slice(-6);
+
       return data;
     } catch (error) {
       console.error('Error fetching reasoning:', error);
@@ -61,6 +77,7 @@ export default function UniversalAI({ onBack }) {
       
       setSteps(data.steps || []);
       setFinalAnswer(data.final_answer || '');
+      setErrorMessage('');
       setIsProcessing(false);
 
       setTimeout(() => {
@@ -69,6 +86,8 @@ export default function UniversalAI({ onBack }) {
 
     } catch (error) {
       console.error('Failed to process request:', error);
+      const message = error instanceof Error ? error.message : 'Reasoning format error, please try again.';
+      setErrorMessage(message);
       setIsProcessing(false);
       setShowReasoning(false);
       setIsEntering(false);
@@ -89,6 +108,10 @@ export default function UniversalAI({ onBack }) {
       setInputText('');
       setSteps([]);
       setFinalAnswer('');
+      setErrorMessage('');
+      historyRef.current = [];
+      sessionIdRef.current = generateSessionId();
+      setStoredSessionId(sessionIdRef.current);
     }, 1300);
   };
 
@@ -109,7 +132,13 @@ export default function UniversalAI({ onBack }) {
           className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-0 mb-6 sm:mb-8"
         >
           <button
-            onClick={onBack}
+            onClick={() => {
+              if (showReasoning || isExiting) {
+                handleReset();
+              } else {
+                onBack();
+              }
+            }}
             className="flex items-center gap-2 px-4 py-2 bg-white/70 hover:bg-white/90 text-slate-800 rounded-xl transition-colors shadow-md backdrop-blur-sm border border-indigo-200"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -234,6 +263,11 @@ export default function UniversalAI({ onBack }) {
                               }
                             }}
                           />
+                          {errorMessage && (
+                            <div className="mt-4 rounded-xl border border-amber-400/60 bg-amber-100/60 text-amber-800 text-sm px-4 py-3">
+                              {errorMessage}
+                            </div>
+                          )}
                           <div className="absolute bottom-3 right-3 text-xs text-slate-500/80">
                             Press Ctrl+Enter to submit
                           </div>

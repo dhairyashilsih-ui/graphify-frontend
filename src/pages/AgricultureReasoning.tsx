@@ -4,8 +4,10 @@ import { ArrowLeft, Send, Sparkles, Loader2 } from 'lucide-react';
 import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from 'd3-force';
 import { select } from 'd3-selection';
 import { zoom } from 'd3-zoom';
-import { sendToGroq, type GroqMessage } from '../services/groqAI';
+import { sendToGroqJSON, type GroqMessage } from '../services/groqAI';
 import { VoiceAssistant } from '../services/voiceAssistant';
+import { generateSessionId, getStoredSessionId, setStoredSessionId } from '../services/mongodb';
+import { validateReasoningResponse } from '../utils/reasoningValidator';
 
 interface ReasoningNode {
   id: string;
@@ -23,6 +25,7 @@ interface ReasoningResponse {
   nodes: ReasoningNode[];
   edges: ReasoningEdge[];
   reasoning: string[];
+  unavailable?: boolean;
 }
 
 interface AgricultureReasoningProps {
@@ -34,11 +37,14 @@ export default function AgricultureReasoning({ onBack }: AgricultureReasoningPro
   const [isProcessing, setIsProcessing] = useState(false);
   const [showGraph, setShowGraph] = useState(false);
   const [graphData, setGraphData] = useState<ReasoningResponse | null>(null);
-  const [stepGraphs, setStepGraphs] = useState<ReasoningResponse[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [graphVersion, setGraphVersion] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [fullAnswer, setFullAnswer] = useState('');
+  const [graphUnavailable, setGraphUnavailable] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const sessionIdRef = useRef<string>('');
+  const historyRef = useRef<Array<{ q: string; a: string }>>([]);
   
   const svgRef = useRef<SVGSVGElement>(null);
   const inputControls = useAnimation();
@@ -46,6 +52,8 @@ export default function AgricultureReasoning({ onBack }: AgricultureReasoningPro
 
   useEffect(() => {
     voiceAssistantRef.current = new VoiceAssistant();
+    sessionIdRef.current = getStoredSessionId() || generateSessionId();
+    setStoredSessionId(sessionIdRef.current);
     return () => {
       if (voiceAssistantRef.current) {
         voiceAssistantRef.current.stopSpeaking();
@@ -54,225 +62,65 @@ export default function AgricultureReasoning({ onBack }: AgricultureReasoningPro
   }, []);
 
   // Real AI reasoning with Groq
-  const fetchReasoning = async (query: string): Promise<{ graphData: ReasoningResponse, stepGraphs: ReasoningResponse[] }> => {
-    // Step 1: Get reasoning steps first
-    const stepsPrompt: GroqMessage[] = [
+  const fetchReasoning = async (query: string): Promise<ReasoningResponse & { finalAnswer: string }> => {
+    const contextLines = historyRef.current.slice(-5).map((t, idx) => `${idx + 1}. Q: ${t.q}\nA: ${t.a}`).join('\n');
+
+    const prompt: GroqMessage[] = [
       {
         role: 'system',
-        content: 'You are an agricultural AI expert. Break down the answer into 4-6 clear reasoning steps. Return ONLY valid JSON: {"reasoning": ["step 1 text", "step 2 text", ...]}'
+        content: 'You are Krushimitra, an expert agricultural AI assistant. Return ONLY valid JSON with fields: reasoning (array of 4-6 concise steps), causal_graph { nodes: [{id,label,type}], links: [{source,target,relation,strength}] }, and final_answer (concise but practical). Do not include prose outside JSON.'
       },
       {
         role: 'user',
-        content: `Question: ${query}\n\nGenerate reasoning steps JSON:`
+        content: `${contextLines ? `Recent context (session ${sessionIdRef.current}):\n${contextLines}\n\n` : ''}Question: ${query}\nProvide the JSON object now.`
       }
     ];
 
-    const stepsResponse = await sendToGroq(stepsPrompt);
-    
-    // Parse reasoning steps
-    let reasoningSteps: string[] = [];
-    try {
-      const jsonMatch = stepsResponse.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        reasoningSteps = parsed.reasoning || [];
-      }
-    } catch (error) {
-      console.error('Failed to parse steps, using fallback:', error);
-      reasoningSteps = [
-        'Analyzing your agriculture question...',
-        'Processing relevant data...',
-        'Evaluating best practices...',
-        'Formulating recommendation...'
-      ];
+    const jsonResponse = await sendToGroqJSON(prompt, { sessionId: sessionIdRef.current });
+    const validation = validateReasoningResponse(jsonResponse);
+
+    if (!validation.ok || !validation.data) {
+      console.warn('Reasoning validation failed:', validation);
+      throw new Error(validation.error || 'Reasoning format error, please try again.');
     }
 
-    // Generate unique graph structure for each step with distinct patterns
-    const stepGraphsData: ReasoningResponse[] = [];
-    
-    // Diverse graph patterns that explain agricultural reasoning
-    const graphPatterns = [
-      { // Pattern 1: Initial Analysis - Linear Flow
-        nodes: [
-          { id: '1', label: 'Question' },
-          { id: '2', label: 'Context' },
-          { id: '3', label: 'Analysis' },
-          { id: '4', label: 'Direction' }
-        ],
-        edges: [
-          { source: '1', target: '2' },
-          { source: '2', target: '3' },
-          { source: '3', target: '4' }
-        ]
-      },
-      { // Pattern 2: Multi-Factor Analysis - Branching
-        nodes: [
-          { id: '1', label: 'Problem' },
-          { id: '2', label: 'Soil' },
-          { id: '3', label: 'Climate' },
-          { id: '4', label: 'Water' },
-          { id: '5', label: 'Impact' }
-        ],
-        edges: [
-          { source: '1', target: '2' },
-          { source: '1', target: '3' },
-          { source: '1', target: '4' },
-          { source: '2', target: '5' },
-          { source: '3', target: '5' },
-          { source: '4', target: '5' }
-        ]
-      },
-      { // Pattern 3: Data Integration - Convergent
-        nodes: [
-          { id: '1', label: 'Research' },
-          { id: '2', label: 'Experience' },
-          { id: '3', label: 'Synthesis' },
-          { id: '4', label: 'Strategy' }
-        ],
-        edges: [
-          { source: '1', target: '3' },
-          { source: '2', target: '3' },
-          { source: '3', target: '4' }
-        ]
-      },
-      { // Pattern 4: Feedback Loop - Open Chain
-        nodes: [
-          { id: '1', label: 'Apply' },
-          { id: '2', label: 'Monitor' },
-          { id: '3', label: 'Evaluate' },
-          { id: '4', label: 'Adjust' }
-        ],
-        edges: [
-          { source: '1', target: '2' },
-          { source: '2', target: '3' },
-          { source: '3', target: '4' }
-        ]
-      },
-      { // Pattern 5: Central Concept - Hub
-        nodes: [
-          { id: '1', label: 'Core Solution' },
-          { id: '2', label: 'Timing' },
-          { id: '3', label: 'Method' },
-          { id: '4', label: 'Resources' },
-          { id: '5', label: 'Benefits' }
-        ],
-        edges: [
-          { source: '1', target: '2' },
-          { source: '1', target: '3' },
-          { source: '1', target: '4' },
-          { source: '1', target: '5' }
-        ]
-      },
-      { // Pattern 6: Parallel Approaches - Diamond
-        nodes: [
-          { id: '1', label: 'Goal' },
-          { id: '2', label: 'Option A' },
-          { id: '3', label: 'Option B' },
-          { id: '4', label: 'Compare' },
-          { id: '5', label: 'Decide' }
-        ],
-        edges: [
-          { source: '1', target: '2' },
-          { source: '1', target: '3' },
-          { source: '2', target: '4' },
-          { source: '3', target: '4' },
-          { source: '4', target: '5' }
-        ]
-      },
-      { // Pattern 7: Implementation Steps - Sequential
-        nodes: [
-          { id: '1', label: 'Prepare' },
-          { id: '2', label: 'Execute' },
-          { id: '3', label: 'Verify' },
-          { id: '4', label: 'Optimize' },
-          { id: '5', label: 'Complete' }
-        ],
-        edges: [
-          { source: '1', target: '2' },
-          { source: '2', target: '3' },
-          { source: '3', target: '4' },
-          { source: '4', target: '5' }
-        ]
-      },
-      { // Pattern 8: Hierarchical Breakdown - Tree
-        nodes: [
-          { id: '1', label: 'Main Goal' },
-          { id: '2', label: 'Short-Term' },
-          { id: '3', label: 'Long-Term' },
-          { id: '4', label: 'Task 1' },
-          { id: '5', label: 'Task 2' },
-          { id: '6', label: 'Task 3' }
-        ],
-        edges: [
-          { source: '1', target: '2' },
-          { source: '1', target: '3' },
-          { source: '2', target: '4' },
-          { source: '2', target: '5' },
-          { source: '3', target: '6' }
-        ]
-      }
-    ];
-    
-    // Assign different pattern to each step with unique node IDs
-    for (let i = 0; i < reasoningSteps.length; i++) {
-      const pattern = graphPatterns[i % graphPatterns.length];
-      
-      // Deep copy nodes and edges with unique IDs for this step
-      const stepNodes = pattern.nodes.map(node => ({
-        id: `step${i}-${node.id}`,
-        label: node.label,
-        x: undefined,
-        y: undefined
-      }));
-      
-      const stepEdges = pattern.edges.map(edge => ({
-        source: `step${i}-${edge.source}`,
-        target: `step${i}-${edge.target}`
-      }));
-      
-      stepGraphsData.push({
-        nodes: stepNodes,
-        edges: stepEdges,
-        reasoning: reasoningSteps
-      });
-    }
-    
-    console.log('Generated step graphs:', stepGraphsData.map((g, i) => ({ 
-      step: i, 
-      nodeCount: g.nodes.length, 
-      edgeCount: g.edges.length,
-      firstNodeId: g.nodes[0]?.id 
-    })));
-    
-    setStepGraphs(stepGraphsData);
-    
-    // Set initial graph data from first step
-    const graphData: ReasoningResponse = {
-      nodes: stepGraphsData[0]?.nodes || [],
-      edges: stepGraphsData[0]?.edges || [],
-      reasoning: reasoningSteps
+    const { steps, causal_graph, final_answer } = validation.data;
+    const reasoning: string[] = steps.map((step) => {
+      if (step.text) return `${step.title}: ${step.text}`.trim();
+      return step.title;
+    });
+
+    const graphUnavailable = !causal_graph || !causal_graph.nodes?.length || !causal_graph.links?.length;
+
+    const nodes: ReasoningNode[] = graphUnavailable
+      ? []
+      : causal_graph.nodes.map((n: any) => ({ id: n.id, label: n.label, x: undefined, y: undefined }));
+
+    const edges: ReasoningEdge[] = graphUnavailable
+      ? []
+      : causal_graph.links.map((l: any, idx: number) => ({
+          source: typeof l.source === 'string' ? l.source : l.source.id || `s-${idx}`,
+          target: typeof l.target === 'string' ? l.target : l.target.id || `t-${idx}`
+        }));
+
+    const finalAnswer = final_answer || '';
+
+    historyRef.current = [
+      ...historyRef.current,
+      { q: query, a: finalAnswer || reasoning.join(' ') || 'Answer recorded' }
+    ].slice(-6);
+
+    return {
+      nodes,
+      edges,
+      reasoning,
+      unavailable: graphUnavailable,
+      finalAnswer
     };
-
-    // Step 2: Get detailed answer
-    const answerPrompt: GroqMessage[] = [
-      {
-        role: 'system',
-        content: 'You are Krushimitra, an expert agricultural AI assistant. Provide detailed, practical advice for farmers. Be concise but thorough.'
-      },
-      {
-        role: 'user',
-        content: query
-      }
-    ];
-
-    const detailedAnswer = await sendToGroq(answerPrompt);
-    setFullAnswer(detailedAnswer);
-
-    return { graphData, stepGraphs: stepGraphsData };
   };
 
   // Text-to-Speech with step highlighting using VoiceAssistant
-  const speakReasoning = (steps: string[], graphs: ReasoningResponse[]) => {
+  const speakReasoning = (steps: string[]) => {
     if (!steps.length || !voiceAssistantRef.current) return;
     
     setIsSpeaking(true);
@@ -280,22 +128,13 @@ export default function AgricultureReasoning({ onBack }: AgricultureReasoningPro
     
     const speak = (index: number) => {
       if (index >= steps.length) {
-        // After reasoning steps, speak the full answer
         if (fullAnswer && voiceAssistantRef.current) {
           voiceAssistantRef.current.speak(
             fullAnswer,
-            () => {}, // onStart
+            () => {},
             () => {
               setIsSpeaking(false);
-              // After everything is done, reset to show input again immediately
-              setShowGraph(false);
-              setGraphData(null);
-              setStepGraphs([]);
-              setFullAnswer('');
-              setCurrentStep(0);
-              setGraphVersion(0);
-              setInputText('');
-            } // onEnd
+            }
           );
         } else {
           setIsSpeaking(false);
@@ -304,15 +143,6 @@ export default function AgricultureReasoning({ onBack }: AgricultureReasoningPro
       }
       
       setCurrentStep(index);
-      
-      // Update graph to show structure for current step
-      if (graphs[index]) {
-        console.log(`Switching to graph for step ${index}:`, graphs[index]);
-        setGraphData(graphs[index]);
-        setGraphVersion(prev => prev + 1); // Force graph re-render
-      } else {
-        console.warn(`No graph data for step ${index}`);
-      }
       
       if (voiceAssistantRef.current) {
         voiceAssistantRef.current.speak(
@@ -329,7 +159,7 @@ export default function AgricultureReasoning({ onBack }: AgricultureReasoningPro
   // D3 Graph Rendering - Updates when graphData changes (each step)
   useEffect(() => {
     if (!graphData || !svgRef.current || !showGraph) return;
-    if (!graphData.nodes || graphData.nodes.length === 0) return;
+    if (graphUnavailable || !graphData.nodes || graphData.nodes.length === 0) return;
 
     console.log('Rendering graph with nodes:', graphData.nodes.map(n => n.id));
 
@@ -477,24 +307,36 @@ export default function AgricultureReasoning({ onBack }: AgricultureReasoningPro
     return () => {
       simulation.stop();
     };
-  }, [graphData, showGraph, graphVersion]);
+  }, [graphData, showGraph, graphVersion, graphUnavailable]);
 
   const handleSubmit = async () => {
     if (!inputText.trim()) return;
 
     setIsProcessing(true);
     setShowGraph(true);
+    setGraphUnavailable(false);
+    setErrorMessage(null);
 
-    // Fetch reasoning data
-    const { graphData, stepGraphs: fetchedGraphs } = await fetchReasoning(inputText);
-    setGraphData(graphData);
-    setStepGraphs(fetchedGraphs);
-    setIsProcessing(false);
+    try {
+      const result = await fetchReasoning(inputText);
+      setGraphData({ nodes: result.nodes, edges: result.edges, reasoning: result.reasoning, unavailable: result.unavailable });
+      setFullAnswer(result.finalAnswer);
+      setGraphUnavailable(!!result.unavailable);
+      setIsProcessing(false);
+      setGraphVersion(prev => prev + 1);
 
-    // Start speaking after graph appears (use fresh stepGraphs from fetch)
-    setTimeout(() => {
-      speakReasoning(graphData.reasoning, fetchedGraphs);
-    }, 1000);
+      setTimeout(() => {
+        speakReasoning(result.reasoning || []);
+      }, 600);
+    } catch (error) {
+      console.error('Failed to fetch reasoning:', error);
+      const message = error instanceof Error ? error.message : 'Reasoning format error, please try again.';
+      setErrorMessage(message);
+      setGraphData(null);
+      setGraphUnavailable(true);
+      setShowGraph(false);
+      setIsProcessing(false);
+    }
   };
 
   const handleReset = () => {
@@ -504,7 +346,12 @@ export default function AgricultureReasoning({ onBack }: AgricultureReasoningPro
     setCurrentStep(0);
     setIsSpeaking(false);
     setFullAnswer('');
+    setGraphUnavailable(false);
+    setErrorMessage(null);
     setInputText('');
+    historyRef.current = [];
+    sessionIdRef.current = generateSessionId();
+    setStoredSessionId(sessionIdRef.current);
     inputControls.start({
       width: '100%',
       x: 0,
@@ -573,6 +420,12 @@ export default function AgricultureReasoning({ onBack }: AgricultureReasoningPro
                   disabled={isProcessing}
                 />
 
+                {errorMessage && (
+                  <div className="mt-4 rounded-lg border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                    {errorMessage}
+                  </div>
+                )}
+
                 <button
                   onClick={handleSubmit}
                   disabled={isProcessing || !inputText.trim()}
@@ -615,7 +468,7 @@ export default function AgricultureReasoning({ onBack }: AgricultureReasoningPro
 
                 {/* Reasoning Steps */}
                 <div className="space-y-3">
-                  {graphData?.reasoning.map((step, index) => (
+                  {graphData?.reasoning?.map((step, index) => (
                     <motion.div
                       key={index}
                       initial={{ opacity: 0, x: -20 }}
@@ -668,17 +521,24 @@ export default function AgricultureReasoning({ onBack }: AgricultureReasoningPro
                 </h3>
 
                 {/* SVG Graph */}
-                <div className="bg-slate-800/30 rounded-xl overflow-hidden border border-emerald-500/20">
-                  <svg
-                    key={`graph-${graphVersion}`}
-                    ref={svgRef}
-                    width="600"
-                    height="500"
-                    className="w-full h-auto"
-                  />
+                <div className="bg-slate-800/30 rounded-xl overflow-hidden border border-emerald-500/20 min-h-[240px] flex items-center justify-center">
+                  {graphUnavailable || !graphData?.nodes?.length ? (
+                    <div className="text-center text-emerald-300/70 py-10 px-6">
+                      <p className="font-semibold">Graph unavailable / reasoning not visualized.</p>
+                      <p className="text-sm text-emerald-200/70 mt-2">The model did not return a structured causal graph.</p>
+                    </div>
+                  ) : (
+                    <svg
+                      key={`graph-${graphVersion}`}
+                      ref={svgRef}
+                      width="600"
+                      height="500"
+                      className="w-full h-auto"
+                    />
+                  )}
                 </div>
                 <div className="mt-2 text-xs text-emerald-400/60 text-center">
-                  Step {currentStep + 1} / {graphData?.reasoning.length || 0}
+                  {graphUnavailable ? 'Graph not available for this answer' : `Step ${currentStep + 1} / ${graphData?.reasoning.length || 0}`}
                 </div>
               </motion.div>
             </motion.div>

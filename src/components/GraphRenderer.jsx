@@ -34,25 +34,28 @@ export default function GraphRenderer({
     const actualHeight = containerRect.height || 550;
 
     const svg = select(svgRef.current);
-    
-    // CLEAR EVERYTHING
-    svg.selectAll('*').remove();
-    
+
     // Stop existing simulation
     if (simulationRef.current) {
       simulationRef.current.stop();
     }
 
+    // Remove rendered layers but keep defs so filters are reused
+    svg.selectAll('g.render-layer').remove();
+    svg.selectAll('text.simplify-badge').remove();
+
     // Responsive node radius based on container size
-    const nodeRadius = Math.max(35, Math.min(actualWidth, actualHeight) * 0.08);
+    const nodeRadius = Math.max(32, Math.min(actualWidth, actualHeight) * 0.07);
     const margin = Math.max(40, Math.min(actualWidth, actualHeight) * 0.12);
 
-    // Deep copy nodes and edges
-    const nodes = graphData.nodes.map(n => ({ ...n }));
+    // Deep copy nodes and edges with guardrails for large graphs
+    const MAX_NODES = 120;
+    const MAX_EDGES = 320;
+    const nodes = graphData.nodes.slice(0, MAX_NODES).map(n => ({ ...n }));
     
     // Validate and filter edges
     const nodeIds = new Set(nodes.map(n => n.id));
-    const edges = (graphData.edges || [])
+    let edges = (graphData.edges || [])
       .filter(e => {
         const sourceExists = nodeIds.has(e.source) || nodeIds.has(e.source.id);
         const targetExists = nodeIds.has(e.target) || nodeIds.has(e.target.id);
@@ -63,21 +66,32 @@ export default function GraphRenderer({
       })
       .map(e => ({ ...e }));
 
+    if (edges.length > MAX_EDGES) {
+      edges = edges.slice(0, MAX_EDGES);
+    }
+
+    const simplified = graphData.nodes.length > nodes.length || (graphData.edges?.length || 0) > edges.length;
+
     // ===== DEFS: Filters, Gradients, Markers =====
-    const defs = svg.append('defs');
+    let defs = svg.select('defs');
+    if (defs.empty()) {
+      defs = svg.append('defs');
+    }
 
     // NEON TEAL GLOW FILTER - Health Theme
-    const glowFilter = defs.append('filter')
-      .attr('id', `neon-glow-${graphVersion}`)
-      .attr('x', '-50%')
-      .attr('y', '-50%')
-      .attr('width', '200%')
-      .attr('height', '200%');
+    let glowFilter = defs.select(`#neon-glow-${graphVersion}`);
+    if (glowFilter.empty()) {
+      glowFilter = defs.append('filter')
+        .attr('id', `neon-glow-${graphVersion}`)
+        .attr('x', '-50%')
+        .attr('y', '-50%')
+        .attr('width', '200%')
+        .attr('height', '200%');
 
-    glowFilter.append('feGaussianBlur')
-      .attr('in', 'SourceGraphic')
-      .attr('stdDeviation', '5')
-      .attr('result', 'blur');
+      glowFilter.append('feGaussianBlur')
+        .attr('in', 'SourceGraphic')
+        .attr('stdDeviation', '5')
+        .attr('result', 'blur');
 
     // Convert hex color to RGB for matrix (dynamically based on nodeColor)
     const hexToRgb = (hex) => {
@@ -96,62 +110,72 @@ export default function GraphRenderer({
       .attr('values', `0 0 0 0 ${rgb.r}  0 0 0 0 ${rgb.g}  0 0 0 0 ${rgb.b}  0 0 0 0.55 0`)
       .attr('result', 'glow');
 
-    const feMerge = glowFilter.append('feMerge');
-    feMerge.append('feMergeNode').attr('in', 'glow');
-    feMerge.append('feMergeNode').attr('in', 'glow');
-    feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+      const feMerge = glowFilter.append('feMerge');
+      feMerge.append('feMergeNode').attr('in', 'glow');
+      feMerge.append('feMergeNode').attr('in', 'glow');
+      feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+    }
 
     // SHADOW FILTER
-    const shadowFilter = defs.append('filter')
-      .attr('id', `drop-shadow-${graphVersion}`)
-      .attr('height', '130%');
+    let shadowFilter = defs.select(`#drop-shadow-${graphVersion}`);
+    if (shadowFilter.empty()) {
+      shadowFilter = defs.append('filter')
+        .attr('id', `drop-shadow-${graphVersion}`)
+        .attr('height', '130%');
 
-    shadowFilter.append('feGaussianBlur')
-      .attr('in', 'SourceAlpha')
-      .attr('stdDeviation', '3');
+      shadowFilter.append('feGaussianBlur')
+        .attr('in', 'SourceAlpha')
+        .attr('stdDeviation', '3');
 
-    shadowFilter.append('feOffset')
-      .attr('dx', '0')
-      .attr('dy', '2')
-      .attr('result', 'offsetblur');
+      shadowFilter.append('feOffset')
+        .attr('dx', '0')
+        .attr('dy', '2')
+        .attr('result', 'offsetblur');
 
-    shadowFilter.append('feComponentTransfer')
-      .append('feFuncA')
-      .attr('type', 'linear')
-      .attr('slope', '0.4');
+      shadowFilter.append('feComponentTransfer')
+        .append('feFuncA')
+        .attr('type', 'linear')
+        .attr('slope', '0.4');
 
-    const feMerge2 = shadowFilter.append('feMerge');
-    feMerge2.append('feMergeNode');
-    feMerge2.append('feMergeNode').attr('in', 'SourceGraphic');
+      const feMerge2 = shadowFilter.append('feMerge');
+      feMerge2.append('feMergeNode');
+      feMerge2.append('feMergeNode').attr('in', 'SourceGraphic');
+    }
 
     // NODE GRADIENT using custom nodeColor
-    const gradient = defs.append('radialGradient')
-      .attr('id', `node-gradient-${graphVersion}`);
-    gradient.append('stop')
-      .attr('offset', '0%')
-      .attr('stop-color', nodeColor)
-      .attr('stop-opacity', '1');
-    gradient.append('stop')
-      .attr('offset', '100%')
-      .attr('stop-color', nodeColor)
-      .attr('stop-opacity', '1');
+    let gradient = defs.select(`#node-gradient-${graphVersion}`);
+    if (gradient.empty()) {
+      gradient = defs.append('radialGradient')
+        .attr('id', `node-gradient-${graphVersion}`);
+      gradient.append('stop')
+        .attr('offset', '0%')
+        .attr('stop-color', nodeColor)
+        .attr('stop-opacity', '1');
+      gradient.append('stop')
+        .attr('offset', '100%')
+        .attr('stop-color', nodeColor)
+        .attr('stop-opacity', '1');
+    }
 
     // PROFESSIONAL ARROW MARKER using custom edgeColor
-    defs.append('marker')
-      .attr('id', `arrowhead-${graphVersion}`)
-      .attr('viewBox', '0 0 10 10')
-      .attr('refX', 10)
-      .attr('refY', 5)
-      .attr('markerWidth', 8)
-      .attr('markerHeight', 8)
-      .attr('orient', 'auto')
-      .append('path')
-      .attr('d', 'M 0 0 L 10 5 L 0 10 z')
-      .attr('fill', edgeColor)
-      .attr('opacity', 1);
+    let marker = defs.select(`#arrowhead-${graphVersion}`);
+    if (marker.empty()) {
+      marker = defs.append('marker')
+        .attr('id', `arrowhead-${graphVersion}`)
+        .attr('viewBox', '0 0 10 10')
+        .attr('refX', 10)
+        .attr('refY', 5)
+        .attr('markerWidth', 8)
+        .attr('markerHeight', 8)
+        .attr('orient', 'auto');
+      marker.append('path')
+        .attr('d', 'M 0 0 L 10 5 L 0 10 z')
+        .attr('fill', edgeColor)
+        .attr('opacity', 1);
+    }
 
     // Create container group
-    const g = svg.append('g');
+    const g = svg.append('g').attr('class', 'render-layer');
 
     // Zoom behavior
     const zoomBehavior = zoom()
@@ -178,9 +202,11 @@ export default function GraphRenderer({
     const linkDistance = isTreeLayout 
       ? Math.max(80, actualWidth * 0.15)
       : Math.max(60, actualWidth * 0.12);
-    const chargeStrength = isTreeLayout 
-      ? Math.max(-800, -actualWidth * 0.8)
-      : Math.max(-600, -actualWidth * 0.6);
+    const chargeStrength = simplified
+      ? -220
+      : (isTreeLayout 
+          ? Math.max(-800, -actualWidth * 0.8)
+          : Math.max(-600, -actualWidth * 0.6));
     
     // For tree layout, use fixed positions (fx, fy are already set)
     // For other layouts, let forces move nodes
@@ -191,7 +217,7 @@ export default function GraphRenderer({
         .strength(isTreeLayout ? 0.1 : 0.5))
       .force('charge', forceManyBody().strength(isTreeLayout ? -400 : chargeStrength))
       .force('center', forceCenter(actualWidth / 2, actualHeight / 2))
-      .force('collision', forceCollide().radius(nodeRadius + Math.max(15, actualWidth * 0.025)))
+      .force('collision', forceCollide().radius((simplified ? nodeRadius * 0.6 : nodeRadius) + Math.max(12, actualWidth * 0.02)))
       .force('x', forceX(actualWidth / 2).strength(isTreeLayout ? 0 : 0.05))
       .force('y', forceY(actualHeight / 2).strength(isTreeLayout ? 0 : 0.05))
       .force('boundary', boundaryForce());
@@ -211,12 +237,12 @@ export default function GraphRenderer({
       .enter()
       .append('line')
       .attr('stroke', edgeColor)
-      .attr('stroke-width', 2.5)
+      .attr('stroke-width', simplified ? 1.6 : 2.5)
       .attr('stroke-opacity', enableAnimation ? 0 : 0.85)
-      .attr('marker-end', `url(#arrowhead-${graphVersion})`);
+      .attr('marker-end', simplified ? null : `url(#arrowhead-${graphVersion})`);
 
     // Arrow growth animation
-    if (enableAnimation) {
+    if (enableAnimation && !simplified) {
       edgeElements.transition()
         .delay((d, i) => i * 150)
         .duration(600)
@@ -235,10 +261,10 @@ export default function GraphRenderer({
 
     // Node circles with premium styling - responsive stroke width
     nodeElements.append('circle')
-      .attr('r', nodeRadius)
+      .attr('r', simplified ? nodeRadius * 0.8 : nodeRadius)
       .attr('fill', nodeColor)
-      .attr('stroke', 'none')
-      .attr('filter', `url(#neon-glow-${graphVersion})`)
+      .attr('stroke', simplified ? 'rgba(255,255,255,0.25)' : 'none')
+      .attr('filter', simplified ? null : `url(#neon-glow-${graphVersion})`)
       .style('cursor', 'pointer');
 
     // Node labels with smart text wrapping - responsive font size
@@ -299,7 +325,7 @@ export default function GraphRenderer({
       });
 
     // Fade-in animation for nodes
-    if (enableAnimation) {
+    if (enableAnimation && !simplified) {
       nodeElements.transition()
         .delay((d, i) => i * 80)
         .duration(500)
@@ -420,6 +446,17 @@ export default function GraphRenderer({
           .call(zoomBehavior.transform, 
             { k: scale, x: translateX, y: translateY });
       });
+    }
+
+    if (simplified) {
+      svg.append('text')
+        .attr('class', 'simplify-badge')
+        .attr('x', actualWidth - 12)
+        .attr('y', actualHeight - 12)
+        .attr('text-anchor', 'end')
+        .attr('fill', 'rgba(255,255,255,0.75)')
+        .attr('font-size', 10)
+        .text('Simplified for performance');
     }
 
     // Fade in SVG

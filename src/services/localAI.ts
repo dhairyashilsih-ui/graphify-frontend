@@ -1,4 +1,10 @@
 // Local AI service for FUSION React app
+import {
+  getStoredSessionId,
+  setStoredSessionId,
+  clearStoredSessionId,
+  generateSessionId as generateStoredSessionId
+} from './mongodb';
 export interface AIAnalysisRequest {
   domain: string;
   query: string;
@@ -53,9 +59,12 @@ class LocalAIService {
   private isHealthy: boolean = false;
   private lastHealthCheck: number = 0;
   private healthCheckInterval: number = 30000; // 30 seconds
+  private sessionId: string | null = null;
+  private recentTurns: Array<{ query: string; summary: string }>; // lightweight context for continuity
 
   constructor() {
     this.baseUrl = 'http://localhost:3001/api';
+    this.recentTurns = [];
     this.checkHealth();
   }
 
@@ -111,7 +120,8 @@ class LocalAIService {
 
     try {
       let response: Response;
-      const sessionId = this.generateSessionId();
+      const sessionId = this.getOrCreateSessionId();
+      const context = this.buildContextPayload();
 
       if (request.file) {
         // Multimodal analysis with file upload
@@ -121,6 +131,9 @@ class LocalAIService {
         formData.append('inputType', request.inputType || 'text');
         formData.append('generateTTS', generateTTS.toString());
         formData.append('file', request.file);
+        formData.append('sessionId', sessionId);
+        if (context.contextSummary) formData.append('contextSummary', context.contextSummary);
+        formData.append('recentTurns', JSON.stringify(context.recentTurns));
 
         response = await fetch(`${this.baseUrl}/analyze/multimodal`, {
           method: 'POST',
@@ -141,7 +154,10 @@ class LocalAIService {
             domain: request.domain,
             query: request.query,
             inputType: request.inputType || 'text',
-            generateTTS
+            generateTTS,
+            sessionId,
+            contextSummary: context.contextSummary,
+            recentTurns: context.recentTurns
           }),
         });
       }
@@ -151,19 +167,54 @@ class LocalAIService {
         console.log('✅ Analysis completed via Gemini AI with TTS support');
         
         const formattedResponse = this.formatResponse(result, request);
+        this.updateContext(request.query, formattedResponse);
         return formattedResponse;
       } else {
         console.warn('❌ Backend AI request failed, using fallback');
-        return this.getFallbackResponse(request);
+        const fallback = this.getFallbackResponse(request);
+        this.updateContext(request.query, fallback);
+        return fallback;
       }
     } catch (error) {
       console.warn('❌ Backend AI connection failed, using fallback:', error);
-      return this.getFallbackResponse(request);
+      const fallback = this.getFallbackResponse(request);
+      this.updateContext(request.query, fallback);
+      return fallback;
     }
   }
 
-  private generateSessionId(): string {
-    return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  private getOrCreateSessionId(): string {
+    if (this.sessionId) return this.sessionId;
+    const stored = getStoredSessionId();
+    if (stored) {
+      this.sessionId = stored;
+      return stored;
+    }
+    const fresh = generateStoredSessionId();
+    this.sessionId = fresh;
+    setStoredSessionId(fresh);
+    return fresh;
+  }
+
+  startNewSession(): string {
+    clearStoredSessionId();
+    this.recentTurns = [];
+    this.sessionId = generateStoredSessionId();
+    setStoredSessionId(this.sessionId);
+    return this.sessionId;
+  }
+
+  private buildContextPayload() {
+    const recentTurns = this.recentTurns.slice(-5).map((t) => ({
+      query: t.query.slice(0, 200),
+      summary: t.summary.slice(0, 200)
+    }));
+
+    const contextSummary = recentTurns
+      .map((t, idx) => `${idx + 1}. Q: ${t.query} | A: ${t.summary}`)
+      .join(' \n ');
+
+    return { contextSummary, recentTurns };
   }
 
   // Method to handle TTS playback with orb speaking state
@@ -220,6 +271,15 @@ class LocalAIService {
       },
       raw_data: data
     };
+  }
+
+  private updateContext(query: string, response: AIAnalysisResponse) {
+    const summary = response.analysis.summary
+      || response.analysis.insights?.slice(0, 2).join('; ')
+      || response.analysis.recommendations?.slice(0, 1).join('; ')
+      || 'Response recorded';
+
+    this.recentTurns = [...this.recentTurns, { query, summary }].slice(-6);
   }
 
   // Generate TTS for any text

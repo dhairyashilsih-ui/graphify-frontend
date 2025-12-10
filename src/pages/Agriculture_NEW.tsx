@@ -98,6 +98,7 @@ export default function Agriculture({ onBack }: AgricultureProps) {
         // Start real-time graph building from API response
         await startRealtimeBuilding(
           data.aiResponse,
+          'agriculture',
           (step: number, total: number, message: string) => {
             console.log(`Graph building: Step ${step}/${total} - ${message}`);
           }

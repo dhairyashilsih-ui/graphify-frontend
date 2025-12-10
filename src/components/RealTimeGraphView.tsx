@@ -53,8 +53,18 @@ export default function RealTimeGraphView({
     const width = svgRef.current.clientWidth;
     const height = svgRef.current.clientHeight;
 
+    const MAX_NODES = 120;
+    const MAX_LINKS = 320;
+    const safeNodes = nodes.slice(0, MAX_NODES).map(n => ({ ...n }));
+    const nodeIds = new Set(safeNodes.map(n => n.id));
+    const safeLinks = links
+      .filter(l => nodeIds.has(typeof l.source === 'string' ? l.source : (l.source as any)?.id) && nodeIds.has(typeof l.target === 'string' ? l.target : (l.target as any)?.id))
+      .slice(0, MAX_LINKS)
+      .map(l => ({ ...l }));
+    const simplified = nodes.length > safeNodes.length || links.length > safeLinks.length;
+
     // Clear previous content if starting fresh
-    if (nodes.length === 0) {
+    if (safeNodes.length === 0) {
       svg.selectAll('*').remove();
       if (simulationRef.current) {
         simulationRef.current.stop();
@@ -146,7 +156,7 @@ export default function RealTimeGraphView({
         .attr('width', '200%')
         .attr('height', '200%');
       glowFilter.append('feGaussianBlur')
-        .attr('stdDeviation', '4')
+        .attr('stdDeviation', simplified ? '2.5' : '4')
         .attr('result', 'coloredBlur');
       const feMerge = glowFilter.append('feMerge');
       feMerge.append('feMergeNode').attr('in', 'coloredBlur');
@@ -160,11 +170,11 @@ export default function RealTimeGraphView({
         .attr('width', '300%')
         .attr('height', '300%');
       pulseFilter.append('feGaussianBlur')
-        .attr('stdDeviation', '8')
+        .attr('stdDeviation', simplified ? '4' : '8')
         .attr('result', 'coloredBlur');
       pulseFilter.append('feFlood')
         .attr('flood-color', '#00ff88')
-        .attr('flood-opacity', '0.8');
+        .attr('flood-opacity', simplified ? '0.5' : '0.8');
 
       // Enhanced glow filter for connection lines
       const lineGlowFilter = defs.append('filter')
@@ -203,6 +213,17 @@ export default function RealTimeGraphView({
 
     const simulation = simulationRef.current;
     const g = svg.select('.main-group');
+    svg.selectAll('.simplify-badge').remove();
+    if (simplified) {
+      svg.append('text')
+        .attr('class', 'simplify-badge')
+        .attr('x', width - 8)
+        .attr('y', height - 8)
+        .attr('text-anchor', 'end')
+        .attr('fill', 'rgba(255,255,255,0.75)')
+        .attr('font-size', 10)
+        .text('Simplified for performance');
+    }
 
     // Position nodes in a linear flowline (horizontal line arrangement)
     const positionNodesInFlowline = (nodes: any[]) => {
@@ -226,26 +247,26 @@ export default function RealTimeGraphView({
     };
 
     // Position nodes in linear flowline layout
-    positionNodesInFlowline(nodes);
+    positionNodesInFlowline(safeNodes);
 
     // Update simulation data
-    simulation.nodes(nodes);
+    simulation.nodes(safeNodes as any);
     const linkForce = simulation.force('link') as d3.ForceLink<any, any>;
     if (linkForce) {
-      linkForce.links(links);
+      linkForce.links(safeLinks as any);
     }
 
     // Debug logging
     console.log('🔍 RealTimeGraphView - Updating with:', {
-      nodeCount: nodes.length,
-      linkCount: links.length,
-      nodes: nodes.map(n => ({ id: n.id, label: n.label })),
-      links: links.map(l => ({ source: l.source, target: l.target, flowDirection: l.flowDirection }))
+      nodeCount: safeNodes.length,
+      linkCount: safeLinks.length,
+      nodes: safeNodes.map(n => ({ id: n.id, label: n.label })),
+      links: safeLinks.map(l => ({ source: l.source, target: l.target, flowDirection: l.flowDirection }))
     });
 
     // Update links with enhanced visibility
     const linkSelection = g.selectAll('.link')
-      .data(links, (d: any) => `${d.source}-${d.target}`);
+      .data(safeLinks, (d: any) => `${d.source}-${d.target}`);
     
     linkSelection.exit().remove();
     
@@ -258,6 +279,7 @@ export default function RealTimeGraphView({
         return '#3b82f6'; // Blue for forward connections
       })
       .attr('stroke-width', (d: any) => {
+        if (simplified) return 2.2;
         if (d.flowDirection === 'forward') return 5; // Thicker main connections
         if (d.flowDirection === 'feedback') return 4; // Medium feedback connections
         return 3; // Thinner branch connections
@@ -273,7 +295,7 @@ export default function RealTimeGraphView({
         if (d.flowDirection === 'branch') return 'url(#branch-arrow)';
         return 'url(#arrow)';
       })
-      .attr('filter', 'url(#line-glow)') // Add enhanced glow effect to all lines
+      .attr('filter', simplified ? null : 'url(#line-glow)') // Add enhanced glow effect to all lines
       .style('cursor', 'pointer')
       .on('mouseover', function(_event: any, d: any) {
         // Highlight connection on hover
@@ -281,9 +303,8 @@ export default function RealTimeGraphView({
           .transition()
           .duration(200)
           .attr('stroke-width', () => {
-            const currentWidth = d.flowDirection === 'forward' ? 5 : 
-                               d.flowDirection === 'feedback' ? 4 : 3;
-            return currentWidth + 2; // Increase width on hover
+            const baseWidth = simplified ? 2.2 : (d.flowDirection === 'forward' ? 5 : d.flowDirection === 'feedback' ? 4 : 3);
+            return baseWidth + (simplified ? 0.6 : 2); // Increase width on hover
           })
           .attr('stroke-opacity', 1.0);
       })
@@ -306,8 +327,9 @@ export default function RealTimeGraphView({
 
     // Animate new links with enhanced visibility
     linkEnter.transition()
-      .duration(1000)
+      .duration(800)
       .attr('stroke-opacity', (d: any) => {
+        if (simplified) return 0.55;
         if (d.flowDirection === 'forward') return 0.9; // Most visible for main flow
         if (d.flowDirection === 'feedback') return 0.8; // Highly visible for feedback
         return 0.7; // Visible for branch connections
@@ -317,7 +339,7 @@ export default function RealTimeGraphView({
 
     // Update nodes
     const nodeSelection = g.selectAll('.node-group')
-      .data(nodes, (d: any) => d.id);
+      .data(safeNodes, (d: any) => d.id);
     
     nodeSelection.exit()
       .transition()
@@ -358,8 +380,8 @@ export default function RealTimeGraphView({
         return colors[d.group % colors.length];
       })
       .attr('stroke', '#fff')
-      .attr('stroke-width', 3)
-      .attr('filter', (d: any) => d.isNew ? 'url(#pulse)' : 'url(#glow)')
+      .attr('stroke-width', simplified ? 2 : 3)
+      .attr('filter', simplified ? null : (d: any) => d.isNew ? 'url(#pulse)' : 'url(#glow)')
       .style('cursor', 'pointer');
 
     // Add multi-line text for flowchart boxes

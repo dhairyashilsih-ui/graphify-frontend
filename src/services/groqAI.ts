@@ -1,38 +1,36 @@
-import Groq from 'groq-sdk';
-
-const apiKey = import.meta.env.VITE_GROQ_API_KEY;
-console.log('Groq API Key loaded:', apiKey ? `${apiKey.substring(0, 10)}...` : 'MISSING');
-
-const groq = new Groq({
-  apiKey: apiKey,
-  dangerouslyAllowBrowser: true
-});
+const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001/api';
 
 export interface GroqMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
 }
 
-export async function sendToGroq(messages: GroqMessage[]): Promise<string> {
-  try {
-    if (!apiKey) {
-      throw new Error('GROQ API key is missing. Please add VITE_GROQ_API_KEY to your environment variables.');
-    }
+interface GroqOptions {
+  sessionId?: string;
+}
 
-    const chatCompletion = await groq.chat.completions.create({
-      messages: messages,
-      model: 'llama-3.1-8b-instant',
-      temperature: 0.7,
-      max_tokens: 1024,
-      stream: false,
+export async function sendToGroq(messages: GroqMessage[], options: GroqOptions = {}): Promise<string> {
+  try {
+    const response = await fetch(`${API_BASE}/groq/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.sessionId ? { 'x-session-id': options.sessionId } : {})
+      },
+      body: JSON.stringify({ messages, sessionId: options.sessionId })
     });
 
-    const content = chatCompletion.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('No response content received from Groq API');
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `Groq proxy error (${response.status})`);
     }
 
-    return content;
+    const data = await response.json();
+    if (!data?.success || !data?.content) {
+      throw new Error(data?.error || 'No response content received from Groq API');
+    }
+
+    return data.content;
   } catch (error: any) {
     console.error('Groq API Error:', error);
     
@@ -51,24 +49,26 @@ export async function sendToGroq(messages: GroqMessage[]): Promise<string> {
   }
 }
 
-export async function sendToGroqJSON(messages: GroqMessage[]): Promise<string> {
+export async function sendToGroqJSON(messages: GroqMessage[], options: GroqOptions = {}): Promise<string> {
   try {
-    if (!apiKey) {
-      throw new Error('GROQ API key is missing. Please add VITE_GROQ_API_KEY to your environment variables.');
-    }
-
-    const chatCompletion = await groq.chat.completions.create({
-      messages: messages,
-      model: 'llama-3.1-8b-instant',
-      temperature: 0.5,
-      max_tokens: 4096,
-      stream: false,
-      response_format: { type: 'json_object' }
+    const response = await fetch(`${API_BASE}/groq/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.sessionId ? { 'x-session-id': options.sessionId } : {})
+      },
+      body: JSON.stringify({ messages, sessionId: options.sessionId, responseFormat: 'json_object', maxTokens: 4096, temperature: 0.5 })
     });
 
-    const content = chatCompletion.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('No JSON response received from Groq API');
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `Groq proxy error (${response.status})`);
+    }
+
+    const data = await response.json();
+    const content = data?.content;
+    if (!data?.success || !content) {
+      throw new Error(data?.error || 'No JSON response received from API');
     }
 
     // Validate JSON
@@ -101,20 +101,9 @@ export async function sendToGroqStream(
   onChunk: (text: string) => void
 ): Promise<void> {
   try {
-    const stream = await groq.chat.completions.create({
-      messages: messages,
-      model: 'llama-3.1-8b-instant',
-      temperature: 0.7,
-      max_tokens: 1024,
-      stream: true,
-    });
-
-    for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content || '';
-      if (content) {
-        onChunk(content);
-      }
-    }
+    // Backend does not stream yet; fall back to single response
+    const full = await sendToGroq(messages);
+    onChunk(full);
   } catch (error) {
     console.error('Groq API Stream Error:', error);
     throw error;

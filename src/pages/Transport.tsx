@@ -109,7 +109,13 @@ export default function Transport({ onBack }) {
           className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-0 mb-6 sm:mb-8"
         >
           <button
-            onClick={onBack}
+            onClick={() => {
+              if (showReasoning || isExiting) {
+                handleReset();
+              } else {
+                onBack();
+              }
+            }}
             className="inline-flex items-center gap-2 px-3.5 py-2 bg-white/70 hover:bg-white/90 text-slate-800 rounded-xl transition-colors shadow-md backdrop-blur-sm border border-cyan-200"
           >
             <ArrowLeft className="w-5 h-5" />

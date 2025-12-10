@@ -1,12 +1,20 @@
 export class VoiceAssistant {
-  private recognition: any;
-  private synthesis: SpeechSynthesis;
+  private recognition: SpeechRecognition | null;
+  private synthesis: SpeechSynthesis | null;
   private isListening: boolean = false;
+  private readonly isBrowser: boolean;
 
   constructor() {
-    this.synthesis = window.speechSynthesis;
-    
-    // Initialize speech recognition
+    this.isBrowser = typeof window !== 'undefined';
+    this.recognition = null;
+    this.synthesis = null;
+
+    if (!this.isBrowser) {
+      return;
+    }
+
+    this.synthesis = 'speechSynthesis' in window ? window.speechSynthesis : null;
+
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       this.recognition = new SpeechRecognition();
@@ -22,6 +30,13 @@ export class VoiceAssistant {
     onStart?: () => void,
     onEnd?: () => void
   ): void {
+    if (!this.isBrowser) {
+      const errorMsg = 'Voice not supported in this environment (SSR or non-browser).';
+      console.warn(errorMsg);
+      onError?.(new Error(errorMsg));
+      return;
+    }
+
     if (!this.recognition) {
       const errorMsg = 'Speech recognition not supported in this browser. Please use Chrome, Edge, or Safari.';
       console.error(errorMsg);
@@ -69,11 +84,14 @@ export class VoiceAssistant {
           userMessage = 'Microphone not found. Please check your device.';
           break;
         case 'not-allowed':
+        case 'service-not-allowed':
           userMessage = 'Microphone permission denied. Please allow microphone access.';
           break;
         case 'network':
           userMessage = 'Network error. Please check your connection.';
           break;
+        default:
+          userMessage = `Voice recognition error: ${event.error}`;
       }
       
       onError?.(new Error(userMessage));
@@ -88,13 +106,18 @@ export class VoiceAssistant {
     try {
       this.recognition.start();
     } catch (error: any) {
-      console.error('Failed to start recognition:', error);
+      // InvalidStateError occurs if already started; surface readable message
+      const message = error?.name === 'InvalidStateError'
+        ? 'Voice recognition is already running.'
+        : 'Failed to start voice recognition.';
+      console.error(message, error);
       this.isListening = false;
-      onError?.(error);
+      onError?.(new Error(message));
     }
   }
 
   stopListening(): void {
+    if (!this.isBrowser) return;
     if (this.recognition && this.isListening) {
       this.recognition.stop();
       this.isListening = false;
@@ -112,6 +135,11 @@ export class VoiceAssistant {
     }
   ): void {
     const { onStart, onEnd, onError, rate = 1.0, pitch = 1.0 } = options || {};
+    if (!this.isBrowser || !this.synthesis) {
+      const err = new Error('Speech synthesis not supported in this environment.');
+      onError?.(err);
+      return;
+    }
     
     // Cancel any ongoing speech
     this.synthesis.cancel();
@@ -247,11 +275,32 @@ export class VoiceAssistant {
   }
 
   stopSpeaking(): void {
-    this.synthesis.cancel();
+    if (!this.isBrowser) return;
+    this.synthesis?.cancel();
+  }
+
+  cancel(): void {
+    // Safely stop any ongoing speech synthesis
+    try {
+      this.synthesis?.cancel();
+    } catch (err) {
+      console.warn('Speech synthesis cancel failed:', err);
+    }
+
+    // Safely stop recognition if it was started
+    try {
+      if (this.recognition) {
+        this.recognition.stop();
+      }
+    } catch (err) {
+      console.warn('Speech recognition stop failed:', err);
+    }
+
+    this.isListening = false;
   }
 
   isSpeaking(): boolean {
-    return this.synthesis.speaking;
+    return !!this.synthesis?.speaking;
   }
 
   getIsListening(): boolean {

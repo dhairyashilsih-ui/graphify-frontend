@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 
 export interface GraphNode {
   id: string;
@@ -34,6 +34,8 @@ export interface RealTimeGraphState {
   buildingMessage: string;
 }
 
+type SupportedDomain = 'agriculture' | 'health' | 'finance' | 'education' | 'transport' | 'universal' | string;
+
 export const useRealTimeGraph = () => {
   const [graphState, setGraphState] = useState<RealTimeGraphState>({
     nodes: [],
@@ -44,18 +46,28 @@ export const useRealTimeGraph = () => {
     buildingMessage: ''
   });
 
-  const buildTimeoutRef = useRef<NodeJS.Timeout>();
+  const timersRef = useRef<NodeJS.Timeout[]>([]);
   const nodeCounter = useRef(0);
+
+  const clearTimers = useCallback(() => {
+    if (timersRef.current.length) {
+      timersRef.current.forEach(clearTimeout);
+      timersRef.current = [];
+    }
+  }, []);
+
+  useEffect(() => () => {
+    clearTimers();
+  }, [clearTimers]);
 
   // Initialize graph building from API response
   const startRealtimeBuilding = useCallback(async (
     apiResponse: any,
+    domain: SupportedDomain = 'universal',
     onProgress?: (step: number, total: number, message: string) => void
   ) => {
-    // Clear any existing timeout
-    if (buildTimeoutRef.current) {
-      clearTimeout(buildTimeoutRef.current);
-    }
+    // Clear any existing timers
+    clearTimers();
 
     // Reset graph
     setGraphState({
@@ -72,57 +84,71 @@ export const useRealTimeGraph = () => {
     const recommendations = apiResponse.analysis?.recommendations || [];
     const fullText = apiResponse.text || apiResponse.response || '';
 
-    // Extract key agricultural words/concepts from the AI response
-    const extractKeyWords = (text: string, additionalTexts: string[] = []): string[] => {
-      const allText = [text, ...additionalTexts].join(' ').toLowerCase();
-      
-      // Define comprehensive agricultural keywords to extract
-      const agricultureKeywords = [
-        'soil', 'crop', 'water', 'fertilizer', 'nitrogen', 'phosphorus', 'potassium',
-        'irrigation', 'drainage', 'ph', 'nutrients', 'organic', 'compost', 'manure',
-        'pest', 'disease', 'fungus', 'bacteria', 'insect', 'weed', 'herbicide',
-        'pesticide', 'fungicide', 'yield', 'harvest', 'growth', 'seeds', 'planting',
-        'weather', 'climate', 'temperature', 'rainfall', 'drought', 'humidity',
-        'market', 'price', 'demand', 'supply', 'profit', 'cost', 'economy',
-        'sustainable', 'environment', 'ecology', 'biodiversity', 'carbon'
-      ];
-      
-      // Find which keywords appear in the text
-      const foundKeywords = agricultureKeywords.filter(keyword => 
-        allText.includes(keyword)
-      );
-      
-      // If we found enough keywords, use them
-      if (foundKeywords.length >= 3) {
-        return foundKeywords
-          .slice(0, 4) // Limit to 4 words
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1)); // Capitalize
-      }
-      
-      // Fallback: Extract important words from the text using NLP-like approach
-      const words = allText.match(/\b[a-z]{4,}\b/g) || [];
-      const wordFreq = new Map();
-      
-      words.forEach(word => {
-        if (!['this', 'that', 'with', 'have', 'will', 'from', 'they', 'been', 'said', 'each', 'which', 'their', 'time', 'more', 'very', 'when', 'much', 'many', 'some', 'these', 'would', 'other', 'into', 'after', 'first', 'well', 'also'].includes(word)) {
-          wordFreq.set(word, (wordFreq.get(word) || 0) + 1);
-        }
-      });
-      
-      const topWords = Array.from(wordFreq.entries())
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 4)
-        .map(([word]) => word.charAt(0).toUpperCase() + word.slice(1));
-      
-      if (topWords.length >= 3) {
-        return topWords;
-      }
-      
-      // Final fallback: Default agricultural concepts
-      return ['Soil', 'Crop', 'Water', 'Nutrients'];
+    const normalizeDomain = (raw: string): SupportedDomain => {
+      const d = (raw || '').toLowerCase();
+      if (d.startsWith('agri')) return 'agriculture';
+      if (d.startsWith('heal')) return 'health';
+      if (d.startsWith('fin')) return 'finance';
+      if (d.startsWith('edu')) return 'education';
+      if (d.startsWith('tran')) return 'transport';
+      return 'universal';
     };
 
-    const keyWords = extractKeyWords(fullText, [...insights, ...recommendations]);
+    const DOMAIN_KEYWORDS: Record<string, string[]> = {
+      agriculture: ['soil','crop','water','fertilizer','nitrogen','phosphorus','potassium','irrigation','pest','disease','yield','harvest','climate','rainfall','drought','market','price','supply','demand','biodiversity'],
+      health: ['patient','symptom','diagnosis','treatment','medication','therapy','exercise','sleep','stress','nutrition','blood','pressure','heart','glucose','infection','prevention','risk','immunity'],
+      finance: ['revenue','cost','profit','margin','cash','flow','budget','investment','risk','return','portfolio','equity','debt','liquidity','market','volatility','inflation','savings','expense'],
+      education: ['student','learning','curriculum','assessment','skills','literacy','engagement','motivation','practice','study','project','feedback','performance','retention','concept','course','teacher','peer'],
+      transport: ['route','traffic','congestion','safety','fuel','emissions','logistics','delivery','capacity','schedule','delay','speed','load','maintenance','vehicle','driver','transit','rail','freight'],
+      universal: []
+    };
+
+    const STOP_WORDS = new Set(['this','that','with','have','will','from','they','been','said','each','which','their','time','more','very','when','much','many','some','these','would','other','into','after','first','well','also','your','you','and','for','the','are','was','were','than','them','then','about','just','like','over','under','most','least','could','should','might','been','being','because','while','where','there','here','what','how','why','who','whom','whose','can','may']);
+
+    const extractKeyWords = (text: string, additionalTexts: string[], domainName: SupportedDomain): string[] => {
+      const dom = normalizeDomain(domainName);
+      const domainList = DOMAIN_KEYWORDS[dom] || [];
+      const allText = [text, ...additionalTexts].join(' ').toLowerCase();
+      const tokens = allText.split(/[^a-z0-9]+/).filter(Boolean);
+
+      // Domain-first extraction with order preserved by first appearance
+      const positions = new Map<string, number>();
+      tokens.forEach((tok, idx) => {
+        if (domainList.includes(tok) && !positions.has(tok)) {
+          positions.set(tok, idx);
+        }
+      });
+
+      const domainHits = Array.from(positions.entries())
+        .sort((a, b) => a[1] - b[1])
+        .map(([tok]) => tok);
+
+      // Generic noun-ish extraction fallback
+      const freq = new Map<string, { count: number; first: number }>();
+      tokens.forEach((tok, idx) => {
+        if (tok.length < 4) return;
+        if (STOP_WORDS.has(tok)) return;
+        const entry = freq.get(tok) || { count: 0, first: idx };
+        freq.set(tok, { count: entry.count + 1, first: entry.first });
+      });
+
+      const generic = Array.from(freq.entries())
+        .sort((a, b) => a[1].first - b[1].first)
+        .map(([tok]) => tok);
+
+      const combined = [...domainHits, ...generic];
+      const seen = new Set<string>();
+      const orderedUnique = combined.filter((tok) => {
+        if (seen.has(tok)) return false;
+        seen.add(tok);
+        return true;
+      });
+
+      const limited = orderedUnique.slice(0, 8);
+      return limited.length >= 3 ? limited.map((w) => w.charAt(0).toUpperCase() + w.slice(1)) : ['Context','Insight','Action'];
+    };
+
+    const keyWords = extractKeyWords(fullText, [...insights, ...recommendations], domain);
     
     // Create word nodes with proper sequencing for flowline
     const nodes: GraphNode[] = keyWords.map((word: string, index: number) => ({
@@ -134,7 +160,7 @@ export const useRealTimeGraph = () => {
       flowIndex: index // Add flow index for flowline positioning
     }));
 
-    // Create fully connected graph - every node connects to every other node
+    // Create links with a capped connectivity to avoid O(n^2)
     const links: GraphLink[] = [];
     
     // Main sequential flow (primary connections)
@@ -142,41 +168,48 @@ export const useRealTimeGraph = () => {
       links.push({
         source: nodes[i].id,
         target: nodes[i + 1].id,
-        value: 10,
-        strength: 1.0,
+        value: 8,
+        strength: 0.8,
         type: 'positive',
-        timestamp: Date.now() + i * 100,
+        timestamp: Date.now() + i * 50,
         flowDirection: 'forward' as const
       });
     }
-    
-    // Add all other possible connections (fully connected)
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 2; j < nodes.length; j++) { // Skip adjacent nodes (already connected above)
+
+    // Add limited forward/branch connections to avoid O(n^2)
+    const MAX_LINKS = 120;
+    let linkBudget = MAX_LINKS - links.length;
+    const maxFanOut = Math.max(1, Math.min(3, Math.floor(nodes.length / 2)));
+
+    for (let i = 0; i < nodes.length && linkBudget > 0; i++) {
+      for (let j = i + 2; j < nodes.length && linkBudget > 0 && j <= i + 1 + maxFanOut; j++) {
         links.push({
           source: nodes[i].id,
           target: nodes[j].id,
-          value: 6,
+          value: 5,
           strength: 0.6,
           type: 'positive',
-          timestamp: Date.now() + (i * nodes.length + j) * 100,
+          timestamp: Date.now() + (i * nodes.length + j) * 50,
           flowDirection: 'branch' as const
         });
+        linkBudget--;
       }
     }
-    
-    // Add reverse connections for full connectivity
-    for (let i = nodes.length - 1; i > 0; i--) {
-      for (let j = i - 2; j >= 0; j--) { // Skip adjacent reverse connections
+
+    // Add sparse feedback links
+    for (let i = nodes.length - 1; i > 0 && linkBudget > 0; i--) {
+      const backSteps = Math.min(2, i);
+      for (let j = i - 2; j >= Math.max(0, i - backSteps) && linkBudget > 0; j--) {
         links.push({
           source: nodes[i].id,
           target: nodes[j].id,
-          value: 4,
-          strength: 0.4,
+          value: 3,
+          strength: 0.35,
           type: 'positive',
-          timestamp: Date.now() + (i * nodes.length + j + 100) * 100,
+          timestamp: Date.now() + (i * nodes.length + j + 100) * 50,
           flowDirection: 'feedback' as const
         });
+        linkBudget--;
       }
     }
 
@@ -191,7 +224,7 @@ export const useRealTimeGraph = () => {
     // Progressive node addition (slower timing)
     for (let i = 0; i < nodes.length; i++) {
       await new Promise(resolve => {
-        buildTimeoutRef.current = setTimeout(() => {
+        const timer = setTimeout(() => {
           console.log(`🟢 Adding node ${i + 1}:`, nodes[i]);
           setGraphState(prev => ({
             ...prev,
@@ -201,14 +234,15 @@ export const useRealTimeGraph = () => {
           }));
           onProgress?.(i + 1, totalSteps, `Processing: ${nodes[i].label}`);
           resolve(void 0);
-        }, 800 + Math.random() * 400); // Much slower: 800-1200ms per node
+        }, 400 + Math.random() * 200);
+        timersRef.current.push(timer);
       });
     }
 
     // Progressive link addition (slower timing)
     for (let i = 0; i < links.length; i++) {
       await new Promise(resolve => {
-        buildTimeoutRef.current = setTimeout(() => {
+        const timer = setTimeout(() => {
           const sourceLabel = nodes.find(n => n.id === links[i].source)?.label || links[i].source;
           const targetLabel = nodes.find(n => n.id === links[i].target)?.label || links[i].target;
           
@@ -228,13 +262,14 @@ export const useRealTimeGraph = () => {
           }));
           onProgress?.(nodes.length + i + 1, totalSteps, `Connecting: ${sourceLabel} → ${targetLabel}`);
           resolve(void 0);
-        }, 500 + Math.random() * 300); // Slower: 500-800ms per link
+        }, 280 + Math.random() * 160);
+        timersRef.current.push(timer);
       });
     }
 
     // Finalize
     await new Promise(resolve => {
-      buildTimeoutRef.current = setTimeout(() => {
+      const timer = setTimeout(() => {
         setGraphState(prev => ({
           ...prev,
           isBuilding: false,
@@ -242,7 +277,8 @@ export const useRealTimeGraph = () => {
         }));
         onProgress?.(totalSteps, totalSteps, 'Graph construction complete!');
         resolve(void 0);
-      }, 500);
+      }, 250);
+      timersRef.current.push(timer);
     });
 
   }, []);
@@ -288,9 +324,7 @@ export const useRealTimeGraph = () => {
 
   // Clear the graph
   const clearGraph = useCallback(() => {
-    if (buildTimeoutRef.current) {
-      clearTimeout(buildTimeoutRef.current);
-    }
+    clearTimers();
     
     setGraphState({
       nodes: [],
@@ -365,14 +399,14 @@ export const useRealTimeGraph = () => {
 
     // Add nodes progressively (slower timing)
     for (let i = 0; i < demoNodes.length; i++) {
-      await new Promise(resolve => setTimeout(resolve, 1200)); // Slower: 1.2 seconds per node
+      await new Promise(resolve => setTimeout(resolve, 600));
       addNode(demoNodes[i]);
       onProgress?.(i + 1, demoNodes.length + demoLinks.length, `Processing: ${demoNodes[i].label}`);
     }
 
     // Add links progressively (slower timing)
     for (let i = 0; i < demoLinks.length; i++) {
-      await new Promise(resolve => setTimeout(resolve, 800)); // Slower: 0.8 seconds per link
+      await new Promise(resolve => setTimeout(resolve, 420));
       addLink(demoLinks[i]);
       const sourceLabel = demoNodes.find(n => n.id === demoLinks[i].source)?.label || demoLinks[i].source;
       const targetLabel = demoNodes.find(n => n.id === demoLinks[i].target)?.label || demoLinks[i].target;

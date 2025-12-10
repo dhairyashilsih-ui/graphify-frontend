@@ -16,6 +16,13 @@ export const useReasoningPlayer = () => {
   const voiceAssistantRef = useRef(null);
   const stepsRef = useRef([]);
   const summaryGraphRef = useRef(null);
+  const timeoutsRef = useRef([]);
+  const runIdRef = useRef(0);
+  const mountedRef = useRef(true);
+
+  const safeSetState = (setter) => {
+    if (mountedRef.current) setter();
+  };
 
   /**
    * Initialize voice assistant
@@ -29,18 +36,18 @@ export const useReasoningPlayer = () => {
   /**
    * Play a single step: speak + generate and show graph
    */
-  const playStep = useCallback((stepIndex, steps, summaryGraph) => {
+  const playStep = useCallback((stepIndex, steps, summaryGraph, runId) => {
     if (stepIndex >= steps.length) {
       // All steps complete - show summary graph
-      setGraphData({ ...summaryGraph, autoZoom: true });
-      setGraphVersion(prev => prev + 1);
-      setShowSummary(true);
-      setIsPlaying(false);
+      safeSetState(() => setGraphData({ ...summaryGraph, autoZoom: true }));
+      safeSetState(() => setGraphVersion(prev => prev + 1));
+      safeSetState(() => setShowSummary(true));
+      safeSetState(() => setIsPlaying(false));
       return;
     }
 
     const step = steps[stepIndex];
-    setCurrentStepIndex(stepIndex);
+    safeSetState(() => setCurrentStepIndex(stepIndex));
 
     // Build graph from keywords using specified shape
     const stepGraph = buildGraphFromKeywords(
@@ -53,33 +60,36 @@ export const useReasoningPlayer = () => {
     // Add layout type to graph data for renderer
     stepGraph.layout = step.graphShape;
     
-    setGraphData(stepGraph);
-    setGraphVersion(prev => prev + 1);
-    setShowSummary(false);
+    safeSetState(() => setGraphData(stepGraph));
+    safeSetState(() => setGraphVersion(prev => prev + 1));
+    safeSetState(() => setShowSummary(false));
 
     // Speak the step text
     initializeVoice();
     if (voiceAssistantRef.current) {
-      voiceAssistantRef.current.speak(step.text, {
+      voiceAssistantRef.current.speak(step.text || step.title || '', {
         onEnd: () => {
           // Wait 800ms then play next step
-          setTimeout(() => {
-            playStep(stepIndex + 1, steps, summaryGraph);
+          const t = setTimeout(() => {
+            playStep(stepIndex + 1, steps, summaryGraph, runId);
           }, 800);
+          timeoutsRef.current.push(t);
         },
         onError: (error) => {
           console.error('Voice error:', error);
           // Continue to next step even if voice fails
-          setTimeout(() => {
-            playStep(stepIndex + 1, steps, summaryGraph);
+          const t = setTimeout(() => {
+            playStep(stepIndex + 1, steps, summaryGraph, runId);
           }, 2000);
+          timeoutsRef.current.push(t);
         }
       });
     } else {
       // No voice - just delay and continue
-      setTimeout(() => {
-        playStep(stepIndex + 1, steps, summaryGraph);
+      const t = setTimeout(() => {
+        playStep(stepIndex + 1, steps, summaryGraph, runId);
       }, 2000);
+      timeoutsRef.current.push(t);
     }
   }, [initializeVoice]);
 
@@ -87,17 +97,26 @@ export const useReasoningPlayer = () => {
    * Start reasoning playback
    */
   const startReasoning = useCallback((steps, summaryKeywords) => {
+    // Cancel previous run timers and voice
+    timeoutsRef.current.forEach(clearTimeout);
+    timeoutsRef.current = [];
+    voiceAssistantRef.current?.cancel?.();
+
     if (!steps || steps.length === 0) {
       console.error('No steps provided for reasoning');
+      safeSetState(() => {
+        setGraphData(null);
+        setIsPlaying(false);
+        setShowSummary(false);
+      });
       return;
     }
 
-    // Store refs
-    stepsRef.current = steps;
-    
-    // Build summary graph from keywords using cluster layout
+    // Store refs with defensive defaults
+    stepsRef.current = steps.filter(Boolean);
+    const safeKeywords = Array.isArray(summaryKeywords) ? summaryKeywords.filter(Boolean) : [];
     const summaryGraph = buildGraphFromKeywords(
-      summaryKeywords,
+      safeKeywords.length ? safeKeywords : ['Context', 'Reasoning'],
       'cluster',
       700,
       550
@@ -106,20 +125,20 @@ export const useReasoningPlayer = () => {
     summaryGraphRef.current = summaryGraph;
 
     // Start playback
-    setIsPlaying(true);
-    setCurrentStepIndex(0);
-    setShowSummary(false);
-    
-    playStep(0, steps, summaryGraph);
+    safeSetState(() => setIsPlaying(true));
+    safeSetState(() => setCurrentStepIndex(0));
+    safeSetState(() => setShowSummary(false));
+    const runId = ++runIdRef.current;
+    playStep(0, stepsRef.current, summaryGraph, runId);
   }, [playStep]);
 
   /**
    * Reset player state
    */
   const resetPlayer = useCallback(() => {
-    if (voiceAssistantRef.current) {
-      voiceAssistantRef.current.cancel();
-    }
+    voiceAssistantRef.current?.cancel?.();
+    timeoutsRef.current.forEach(clearTimeout);
+    timeoutsRef.current = [];
     setCurrentStepIndex(0);
     setIsPlaying(false);
     setGraphData(null);
@@ -164,10 +183,10 @@ export const useReasoningPlayer = () => {
    */
   const showSummaryGraph = useCallback(() => {
     if (summaryGraphRef.current) {
-      setGraphData({ ...summaryGraphRef.current, autoZoom: true });
-      setGraphVersion(prev => prev + 1);
-      setShowSummary(true);
-      setIsPlaying(false);
+      safeSetState(() => setGraphData({ ...summaryGraphRef.current, autoZoom: true }));
+      safeSetState(() => setGraphVersion(prev => prev + 1));
+      safeSetState(() => setShowSummary(true));
+      safeSetState(() => setIsPlaying(false));
       
       // Cancel any ongoing speech
       if (voiceAssistantRef.current) {
@@ -180,10 +199,13 @@ export const useReasoningPlayer = () => {
    * Cleanup voice on unmount
    */
   const cleanup = useCallback(() => {
+    mountedRef.current = false;
     if (voiceAssistantRef.current) {
-      voiceAssistantRef.current.cancel();
+      voiceAssistantRef.current.cancel?.();
       voiceAssistantRef.current = null;
     }
+    timeoutsRef.current.forEach(clearTimeout);
+    timeoutsRef.current = [];
   }, []);
 
   return {

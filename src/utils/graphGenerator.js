@@ -1,8 +1,9 @@
 // NEW Graph Generator - Single Groq call with keywords and layout hints
 // AI returns reasoning steps with keywords, we build graphs locally
+import { validateReasoningResponse } from './reasoningValidator';
 
 // Generate optimized prompt for single Groq API call
-export const generateReasoningPrompt = (question, domain = 'general') => {
+export const generateReasoningPrompt = (question, domain = 'general', context = '') => {
   const domainInstructions = {
     agriculture: 'agricultural concepts: Soil, Water, Climate, NPK, pH, Irrigation, Pests, Yield, etc.',
     health: 'health concepts: Cardiovascular, Nutrition, Exercise, Metabolism, Prevention, Treatment, Symptoms, Diagnosis, etc.',
@@ -55,79 +56,26 @@ No markdown. Just clean JSON.`
     },
     {
       role: 'user',
-      content: `Question: ${question}`
+      content: `${context ? `Context:\n${context}\n\n` : ''}Question: ${question}`
     }
   ];
 };
 
 // Parse AI response and return structured data
 export const parseReasoningResponse = (response) => {
-  try {
-    // Remove markdown code blocks if present
-    let cleanResponse = response.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-    
-    // Extract JSON from response
-    const firstBrace = cleanResponse.indexOf('{');
-    const lastBrace = cleanResponse.lastIndexOf('}');
-    
-    if (firstBrace === -1 || lastBrace === -1) {
-      throw new Error('No JSON found in response');
-    }
-    
-    const jsonStr = cleanResponse.substring(firstBrace, lastBrace + 1);
-    const data = JSON.parse(jsonStr);
-    
-    // Validate structure
-    if (!data.steps || !Array.isArray(data.steps) || data.steps.length === 0) {
-      throw new Error('Invalid steps structure');
-    }
-    
-    // Normalize data
-    const steps = data.steps.map((step, index) => ({
-      title: step.title || `Step ${index + 1}`,
-      text: step.text || '',
-      keywords: step.keywords || [],
-      graphShape: step.graphShape || 'circle'
-    }));
-    
-    // Remove duplicate summary keywords and limit to 16
-    const summaryKeywords = [...new Set(data.summaryKeywords || [])].slice(0, 16);
-    
-    return {
-      steps,
-      summaryKeywords,
-      final_answer: data.final_answer || ''
-    };
-    
-  } catch (error) {
-    console.error('Failed to parse reasoning response:', error);
-    
-    // Return fallback structure
-    return {
-      steps: [
-        {
-          title: 'Analyzing Question',
-          text: 'Processing your agricultural query...',
-          keywords: ['Question', 'Context', 'Analysis', 'Data', 'Factors'],
-          graphShape: 'circle'
-        },
-        {
-          title: 'Identifying Factors',
-          text: 'Examining key agricultural factors...',
-          keywords: ['Soil', 'Water', 'Climate', 'Seeds', 'Management'],
-          graphShape: 'radial'
-        },
-        {
-          title: 'Forming Solution',
-          text: 'Developing practical recommendations...',
-          keywords: ['Research', 'Best Practice', 'Solution', 'Implementation'],
-          graphShape: 'diamond'
-        }
-      ],
-      summaryKeywords: ['Question', 'Analysis', 'Soil', 'Water', 'Climate', 'Solution'],
-      final_answer: 'Please try asking your question again for a detailed answer.'
-    };
+  const result = validateReasoningResponse(response);
+
+  if (!result.ok || !result.data) {
+    console.warn('Reasoning validation failed:', { error: result.error, snippet: result.debugSnippet });
+    throw new Error(result.error || 'Reasoning format error, please try again.');
   }
+
+  return {
+    steps: result.data.steps,
+    summaryKeywords: result.data.summaryKeywords || [],
+    final_answer: result.data.final_answer || '',
+    causal_graph: result.data.causal_graph
+  };
 };
 
 // Build graph structure from keywords using specified layout

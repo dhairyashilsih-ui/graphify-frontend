@@ -89,6 +89,7 @@ const premiumEase = [0.22, 1, 0.36, 1] as const;
 
 export default function DomainSelection({ onSelectDomain }: DomainSelectionProps) {
   const orbControls = useAnimation();
+  const contentStartRef = useRef<HTMLDivElement | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -105,6 +106,7 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
   const cardRef = useRef<HTMLDivElement>(null);
   const mouseFrameRef = useRef<number | null>(null);
   const latestMouseRef = useRef({ x: 0, y: 0 });
+  const lastSpeakEndRef = useRef<number>(0);
   const prefersReducedMotion = useReducedMotion();
   const [isScrolling, setIsScrolling] = useState(false);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -171,6 +173,18 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
     updateIsMobile();
     window.addEventListener('resize', updateIsMobile);
     return () => window.removeEventListener('resize', updateIsMobile);
+  }, []);
+
+  // If returning from a domain page, skip the intro header position and scroll to the main content area
+  useEffect(() => {
+    const returning = sessionStorage.getItem('fusion_returning_from_domain');
+    if (returning && contentStartRef.current) {
+      sessionStorage.removeItem('fusion_returning_from_domain');
+      // Wait a tick so layout settles, then scroll the main content into view
+      setTimeout(() => {
+        contentStartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 300);
+    }
   }, []);
 
   useEffect(() => {
@@ -260,7 +274,8 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
 
   // Mouse move handler for parallax (disabled on mobile for performance)
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current || isMobile) return; // Disable on mobile
+    // Skip parallax when mobile, scrolling, or reduced-motion to lower CPU/GPU usage
+    if (!cardRef.current || isMobile || prefersReducedMotion || isScrolling) return;
     const rect = cardRef.current.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
@@ -289,6 +304,9 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
 
   const startListening = () => {
     if (!voiceAssistantRef.current || isListening) return;
+    // simple cooldown to reduce self-capture
+    const now = Date.now();
+    if (now - lastSpeakEndRef.current < 900) return;
 
     voiceAssistantRef.current.startListening(
       async (text) => {
@@ -298,6 +316,10 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
       (error) => {
         console.error('Listening error:', error);
         setIsListening(false);
+        // Do not auto-restart on permission errors
+        if (error?.message?.toLowerCase().includes('not allowed')) {
+          lastSpeakEndRef.current = Date.now();
+        }
       },
       () => {
         setIsListening(true);
@@ -340,7 +362,8 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
         },
         onEnd: () => {
           setIsSpeaking(false);
-          setTimeout(() => startListening(), 500);
+          lastSpeakEndRef.current = Date.now();
+          setTimeout(() => startListening(), 1000);
         }
       });
 
@@ -382,7 +405,8 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
       voiceAssistantRef.current?.speak(errorMsg, {
         onEnd: () => {
           setIsSpeaking(false);
-          setTimeout(() => startListening(), 500);
+          lastSpeakEndRef.current = Date.now();
+          setTimeout(() => startListening(), 1200);
         }
       });
     }
@@ -405,7 +429,7 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
             willChange: 'auto'
           }}
         />
-        {heroParticles.map((particle, index) => (
+        {(!prefersReducedMotion && !isScrolling) && heroParticles.map((particle, index) => (
           <span
             key={index}
             className="absolute rounded-full bg-slate-400"
@@ -422,7 +446,10 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
       </div>
 
       {/* Full-bleed Graphify intro - Premium White Enterprise Design */}
-      <section className="relative w-full flex flex-col overflow-hidden px-6 md:px-10 lg:px-16 pb-6 pt-12">
+      <section
+        ref={contentStartRef}
+        className="relative w-full flex flex-col overflow-hidden px-6 md:px-10 lg:px-16 pb-6 pt-12"
+      >
         {/* Premium white gradient base */}
         <div className="absolute inset-0 bg-gradient-to-b from-white via-slate-50/30 to-white" />
         
