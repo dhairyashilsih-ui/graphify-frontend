@@ -1,275 +1,552 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { ArrowLeft, ChevronDown, CloudRain, Sprout, Droplets, TrendingUp, AlertTriangle, DollarSign } from 'lucide-react';
-import EnhancedAgriOrb from '../components/EnhancedAgriOrb';
-import InputPanel from '../components/InputPanel';
-import RealTimeGraphView from '../components/RealTimeGraphView';
-import { useRealTimeGraph } from '../hooks/useRealTimeGraph';
-import WeatherClimate from './agriculture/WeatherClimate';
-import CropGrowthYield from './agriculture/CropGrowthYield';
-import WaterIrrigation from './agriculture/WaterIrrigation';
-import SoilHealth from './agriculture/SoilHealth';
-import DiseaseManagement from './agriculture/DiseaseManagement';
-import MarketEconomics from './agriculture/MarketEconomics';
-import { localAI } from '../services/localAI';
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowLeft, Send, Sparkles, Loader2 } from 'lucide-react';
+import { sendToGroqJSON } from '../services/groqAI';
+import { generateReasoningPrompt, parseReasoningResponse } from '../utils/graphGenerator';
+import { useReasoningPlayer } from '../hooks/useReasoningPlayer';
+import GraphRenderer from '../components/GraphRenderer';
 
-interface AgricultureProps {
-  onBack: () => void;
-}
+export default function AgricultureSection({ onBack }) {
+  const [inputText, setInputText] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [showReasoning, setShowReasoning] = useState(false);
+  const [steps, setSteps] = useState([]);
+  const [finalAnswer, setFinalAnswer] = useState('');
 
-type CurrentView = 'main' | 'weather' | 'crop' | 'water' | 'soil' | 'disease' | 'market';
-
-export default function Agriculture({ onBack }: AgricultureProps) {
-  const [currentView, setCurrentView] = useState<CurrentView>('main');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [showResults, setShowResults] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [audioLevel, setAudioLevel] = useState(0);
-
-  // Real-time graph management
   const {
-    graphState,
-    startRealtimeBuilding,
-    clearGraph,
-    simulateStreamingUpdates
-  } = useRealTimeGraph();
+    currentStepIndex,
+    isPlaying,
+    graphData,
+    graphVersion,
+    showSummary,
+    startReasoning,
+    reset: resetPlayer,
+    jumpToStep,
+    showSummaryGraph,
+    cleanup
+  } = useReasoningPlayer();
 
-  const sections = [
-    {
-      id: 'weather',
-      title: 'Weather & Climate',
-      icon: CloudRain,
-      content: 'Real-time weather analysis and climate impact assessment.',
-    },
-    {
-      id: 'crop',
-      title: 'Crop Growth & Yield',
-      icon: Sprout,
-      content: 'AI-powered crop monitoring and yield optimization strategies.',
-    },
-    {
-      id: 'water',
-      title: 'Water & Irrigation',
-      icon: Droplets,
-      content: 'Smart irrigation management and water conservation techniques.',
-    },
-    {
-      id: 'soil',
-      title: 'Soil Health',
-      icon: TrendingUp,
-      content: 'Comprehensive soil analysis and fertility management solutions.',
-    },
-    {
-      id: 'disease',
-      title: 'Disease Management',
-      icon: AlertTriangle,
-      content: 'Advanced crop protection and integrated pest management strategies.',
-    },
-    {
-      id: 'market',
-      title: 'Market & Economics',
-      icon: DollarSign,
-      content: 'Financial analysis and market intelligence for agricultural operations.',
-    },
-  ];
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => cleanup();
+  }, [cleanup]);
 
-  const toggleSection = (id: string) => {
-    setCurrentView(id as CurrentView);
-  };
-
-  const handleBackToMain = () => {
-    setCurrentView('main');
-  };
-
-  const handleSubmit = async (data: any) => {
-    setIsAnalyzing(true);
-    setShowResults(true); // Show graph container immediately
-
-    console.log('🌾 Agriculture analysis started:', data);
-
-    // Clear existing graph
-    clearGraph();
-
+  /**
+   * Fetch reasoning structure from AI (SINGLE API CALL)
+   */
+  const fetchReasoning = async (question) => {
     try {
-      // Check if we have AI response from InputPanel
-      if (data.aiResponse && data.aiResponse.success) {
-        console.log('✅ Using AI-generated analysis, building real-time graph...');
-        
-        // Start real-time graph building from API response
-        await startRealtimeBuilding(
-          data.aiResponse,
-          'agriculture',
-          (step: number, total: number, message: string) => {
-            console.log(`Graph building: Step ${step}/${total} - ${message}`);
-          }
-        );
-
-        // Play TTS audio if available
-        if (data.aiResponse.analysis.audio) {
-          console.log('🔊 Playing TTS audio for agriculture analysis...');
-          try {
-            await localAI.playResponseAudio(
-              data.aiResponse,
-              () => {
-                console.log('🎙️ Agriculture orb started speaking');
-                setIsSpeaking(true);
-              },
-              () => {
-                console.log('🤐 Agriculture orb finished speaking');
-                setIsSpeaking(false);
-                setAudioLevel(0);
-              },
-              (level: number) => {
-                setAudioLevel(level);
-              }
-            );
-          } catch (error) {
-            console.warn('Failed to play TTS audio:', error);
-            setIsSpeaking(false);
-            setAudioLevel(0);
-          }
-        }
-      } else {
-        console.log('🔄 No AI response, using demo real-time simulation');
-        
-        // Use simulation for demo purposes
-        await simulateStreamingUpdates((step: number, total: number, message: string) => {
-          console.log(`Demo graph building: Step ${step}/${total} - ${message}`);
-        });
-      }
+      const prompt = generateReasoningPrompt(question, 'agriculture');
+      const response = await sendToGroqJSON(prompt);
+      const data = parseReasoningResponse(response);
+      
+      return data;
     } catch (error) {
-      console.error('Error during graph building:', error);
-    } finally {
-      setIsAnalyzing(false);
+      console.error('Error fetching reasoning:', error);
+      throw error;
     }
   };
 
-  // Render dedicated pages based on current view
-  if (currentView === 'weather') {
-    return <WeatherClimate onBack={handleBackToMain} />;
-  }
-  if (currentView === 'crop') {
-    return <CropGrowthYield onBack={handleBackToMain} />;
-  }
-  if (currentView === 'water') {
-    return <WaterIrrigation onBack={handleBackToMain} />;
-  }
-  if (currentView === 'soil') {
-    return <SoilHealth onBack={handleBackToMain} />;
-  }
-  if (currentView === 'disease') {
-    return <DiseaseManagement onBack={handleBackToMain} />;
-  }
-  if (currentView === 'market') {
-    return <MarketEconomics onBack={handleBackToMain} />;
-  }
+  /**
+   * Handle form submission with animation
+   */
+  const [isEntering, setIsEntering] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!inputText.trim() || isProcessing) return;
+
+    setIsProcessing(true);
+    setIsEntering(true);
+
+    // Wait for input to slide down before showing reasoning view
+    setTimeout(() => {
+      setShowReasoning(true);
+      setIsEntering(false);
+    }, 600);
+
+    try {
+      // SINGLE API call to get complete graph structure
+      const data = await fetchReasoning(inputText);
+      
+      setSteps(data.steps || []);
+      setFinalAnswer(data.final_answer || '');
+      setIsProcessing(false);
+
+      // Start reasoning playback with keyword-based graphs
+      setTimeout(() => {
+        startReasoning(data.steps || [], data.summaryKeywords || []);
+      }, 800);
+
+    } catch (error) {
+      console.error('Failed to process request:', error);
+      setIsProcessing(false);
+      setShowReasoning(false);
+      setIsEntering(false);
+    }
+  };
+
+  /**
+   * Reset to initial state with animation
+   */
+  const [isExiting, setIsExiting] = useState(false);
+
+  const handleReset = () => {
+    setIsExiting(true);
+    // Wait for exit animations to complete, then hide reasoning and show input
+    setTimeout(() => {
+      setShowReasoning(false);
+      setIsExiting(false);
+    }, 1200); // Wait for animations to complete
+    
+    // Reset data after switching views
+    setTimeout(() => {
+      resetPlayer();
+      setInputText('');
+      setSteps([]);
+      setFinalAnswer('');
+    }, 1300);
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-950 via-green-900 to-emerald-950 text-white p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={onBack}
-            className="p-2 hover:bg-white/10 rounded-full transition-colors"
-          >
-            <ArrowLeft className="w-6 h-6" />
-          </button>
-          <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-emerald-300 bg-clip-text text-transparent">
-              Agriculture Intelligence
-            </h1>
-            <p className="text-green-200/80">Smart farming solutions powered by AI</p>
-          </div>
-        </div>
-        
-        {/* Real-time Graph Status */}
-        {graphState.isBuilding && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-green-600/20 backdrop-blur-md border border-green-500/30 rounded-lg px-4 py-2"
-          >
-            <div className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-              <span className="text-sm text-green-200 font-medium">Building Real-Time Graph</span>
-            </div>
-          </motion.div>
-        )}
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50 text-slate-800 px-4 sm:px-6 py-5 sm:py-6 relative overflow-hidden">
+      {/* Ambient gradient effects */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-300/20 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-green-300/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+        <div className="absolute top-1/2 left-1/2 w-96 h-96 bg-teal-300/15 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-8">
-        {/* Left Panel - AI Input & Controls */}
-        <div className="lg:w-1/2 space-y-6">
-          {/* Enhanced Agriculture Orb */}
-          <div className="flex justify-center mb-8">
-            <EnhancedAgriOrb 
-              isActive={isAnalyzing || isSpeaking}
-              audioLevel={audioLevel}
-            />
-          </div>
-
-          {/* Input Panel */}
-          <InputPanel
-            domain="agriculture"
-            onSubmit={handleSubmit}
-          />
-
-          {/* Agriculture Sections */}
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold text-green-300 mb-4">Agricultural Domains</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {sections.map((section) => {
-                const IconComponent = section.icon;
-                return (
-                  <motion.div
-                    key={section.id}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="bg-green-800/30 backdrop-blur-sm border border-green-700/50 rounded-xl p-4 cursor-pointer hover:bg-green-700/40 transition-all duration-300"
-                    onClick={() => toggleSection(section.id)}
-                  >
-                    <div className="flex items-start space-x-3">
-                      <div className="p-2 bg-green-600/30 rounded-lg">
-                        <IconComponent className="w-5 h-5 text-green-400" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-green-200 mb-1">{section.title}</h3>
-                        <p className="text-xs text-green-300/70 leading-relaxed">{section.content}</p>
-                      </div>
-                      <ChevronDown className="w-4 h-4 text-green-400/60" />
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Right Panel - Real-Time Graph */}
-        <div className="lg:w-1/2">
-          {showResults && (
+      <div className="relative z-10">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-0 mb-6 sm:mb-8"
+        >
+          <button
+            onClick={onBack}
+            className="inline-flex items-center gap-2 px-3.5 py-2 bg-white/70 hover:bg-white/90 text-slate-800 rounded-xl transition-colors shadow-md backdrop-blur-sm border border-emerald-200"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            <span>Back</span>
+          </button>
+          
+          <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-emerald-600 via-green-500 to-emerald-600 bg-clip-text text-transparent flex items-center gap-3">
             <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5 }}
-              className="h-full"
+              animate={{ scale: [1, 1.2, 1] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
             >
-              <RealTimeGraphView
-                nodes={graphState.nodes}
-                links={graphState.links}
-                isBuilding={graphState.isBuilding}
-                buildingMessage={graphState.buildingMessage}
-                currentStep={graphState.currentStep}
-                totalSteps={graphState.totalSteps}
-                onNodeClick={(node) => {
-                  console.log('Node clicked:', node);
-                  // You can add node interaction logic here
-                }}
-              />
+              <Sparkles className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-500 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
+            </motion.div>
+            Agriculture AI
+          </h1>
+          
+          <div className="hidden sm:block w-24" />
+        </motion.div>
+
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto">
+        <AnimatePresence mode="wait">
+          {/* Input View */}
+          {!showReasoning && !isExiting && (
+            <motion.div
+              key="input"
+              initial={{ opacity: 0, y: 100 }}
+              animate={isEntering ? { opacity: 0, y: -800 } : { opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -50 }}
+              transition={{ duration: 0.6, ease: "easeInOut" }}
+              className="flex flex-col items-center justify-center min-h-[60vh] sm:min-h-[70vh]"
+            >
+              {/* Floating particles */}
+              <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <motion.div
+                  animate={{ y: [0, -20, 0], opacity: [0.3, 0.6, 0.3] }}
+                  transition={{ duration: 4, repeat: Infinity }}
+                  className="absolute top-20 left-10 w-32 h-32 bg-emerald-400/20 rounded-full blur-3xl"
+                />
+                <motion.div
+                  animate={{ y: [0, 20, 0], opacity: [0.2, 0.5, 0.2] }}
+                  transition={{ duration: 5, repeat: Infinity, delay: 1 }}
+                  className="absolute bottom-20 right-10 w-40 h-40 bg-green-400/20 rounded-full blur-3xl"
+                />
+                <motion.div
+                  animate={{ y: [0, -15, 0], opacity: [0.2, 0.4, 0.2] }}
+                  transition={{ duration: 6, repeat: Infinity, delay: 2 }}
+                  className="absolute top-40 right-1/4 w-24 h-24 bg-teal-300/20 rounded-full blur-2xl"
+                />
+              </div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 100 }}
+                animate={isEntering ? { opacity: 0, y: -800 } : { opacity: 1, y: 0 }}
+                transition={{ delay: isEntering ? 0 : 0.2, duration: 0.6, ease: "easeOut" }}
+                className="w-full max-w-3xl relative z-10"
+              >
+                {/* Decorative header */}
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.3, duration: 0.5 }}
+                  className="text-center mb-8"
+                >
+                  <motion.div className="inline-block mb-4 relative">
+                    <motion.div
+                      animate={{ 
+                        scale: [1, 1.15, 1],
+                        boxShadow: [
+                          '0 0 30px rgba(16, 185, 129, 0.5)',
+                          '0 0 60px rgba(16, 185, 129, 0.8)',
+                          '0 0 30px rgba(16, 185, 129, 0.5)'
+                        ]
+                      }}
+                      transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+                      className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-400 via-green-500 to-emerald-600 flex items-center justify-center shadow-2xl"
+                    >
+                      <Sparkles className="w-10 h-10 text-white drop-shadow-lg" />
+                    </motion.div>
+                    <motion.div
+                      animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }}
+                      transition={{ duration: 1.2, repeat: Infinity, ease: "easeOut" }}
+                      className="absolute inset-0 w-20 h-20 rounded-full border-2 border-emerald-400"
+                    />
+                  </motion.div>
+                  <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold bg-gradient-to-r from-emerald-600 via-green-500 to-emerald-600 bg-clip-text text-transparent mb-3 drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+                    Agriculture Intelligence
+                  </h2>
+                  <p className="text-slate-700 text-base sm:text-lg font-medium">
+                    Get expert agriculture insights powered by AI reasoning
+                  </p>
+                  <div className="flex items-center justify-center gap-2 mt-3">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-xs text-emerald-600/90 font-semibold uppercase tracking-wider">AI-Powered Agricultural Analysis</span>
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" style={{ animationDelay: '0.5s' }} />
+                  </div>
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4 }}
+                  className="relative"
+                >
+                  <div className="absolute -inset-1 bg-gradient-to-r from-emerald-400 via-green-400 to-emerald-400 rounded-3xl blur-xl opacity-30 animate-pulse" />
+                  <div className="relative bg-white/80 backdrop-blur-xl border-2 border-emerald-300/60 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-emerald-300/30">
+                    <div className="mb-6">
+                      <label className="block text-emerald-600 font-bold mb-3 text-sm uppercase tracking-wider flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        Your Agriculture Question
+                      </label>
+                      <div className="relative">
+                        <textarea
+                          value={inputText}
+                          onChange={(e) => setInputText(e.target.value)}
+                          placeholder="E.g., How to optimize tomato yield in summer? What are the best practices for soil management?"
+                          className="w-full h-36 sm:h-40 px-6 py-4 bg-emerald-50/50 border-2 border-emerald-300/40 rounded-2xl text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 resize-none text-base sm:text-lg transition-all"
+                          disabled={isProcessing}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && e.ctrlKey && inputText.trim() && !isProcessing) {
+                              handleSubmit();
+                            }
+                          }}
+                        />
+                        <div className="absolute bottom-3 right-3 text-xs text-slate-500/80">
+                          Press Ctrl+Enter to submit
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <motion.button
+                      onClick={handleSubmit}
+                      disabled={!inputText.trim() || isProcessing}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="w-full px-6 sm:px-8 py-4 sm:py-5 bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-500 hover:from-emerald-600 hover:via-green-600 hover:to-emerald-600 disabled:from-slate-300 disabled:to-slate-400 rounded-2xl font-bold text-lg sm:text-xl flex items-center justify-center gap-3 transition-all shadow-xl shadow-emerald-400/40 hover:shadow-2xl hover:shadow-emerald-500/60 disabled:cursor-not-allowed disabled:shadow-none group relative overflow-hidden border border-emerald-400/30 text-white"
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+                      {isProcessing ? (
+                        <>
+                          <Loader2 className="w-6 h-6 animate-spin" />
+                          <span>Analyzing Your Question...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
+                          <span>Get AI Answer</span>
+                        </>
+                      )}
+                    </motion.button>
+                  </div>
+                </motion.div>
+              </motion.div>
             </motion.div>
           )}
-        </div>
+
+          {/* Reasoning View */}
+          {(showReasoning || isExiting) && (
+            <motion.div
+              key="reasoning"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex flex-col xl:grid xl:grid-cols-3 gap-4 xl:gap-6"
+            >
+              {/* Graph Visualization */}
+              <motion.div
+                initial={{ opacity: 0, y: 800 }}
+                animate={isExiting ? { opacity: 0, y: 800 } : { opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, delay: 0.1, ease: "easeOut" }}
+                className="bg-white/60 backdrop-blur-xl border-2 border-emerald-300/50 rounded-3xl p-4 md:p-6 shadow-2xl shadow-emerald-300/20 xl:col-span-2 order-1"
+              >
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+                  <h3 className="text-lg md:text-xl font-bold text-emerald-700 flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 md:w-6 md:h-6 animate-pulse" />
+                    {showSummary ? 'Summary Graph' : 'Causal Graph'}
+                  </h3>
+                  {showSummary && (
+                    <button
+                      onClick={handleReset}
+                      className="flex items-center gap-2 px-3 py-2 md:px-4 md:py-2 bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 text-white rounded-xl transition-all font-semibold text-xs md:text-sm shadow-lg hover:shadow-emerald-400/50 w-full sm:w-auto justify-center"
+                    >
+                      <ArrowLeft className="w-3 h-3 md:w-4 md:h-4" />
+                      Back to Input
+                    </button>
+                  )}
+                </div>
+
+                <div className="bg-gradient-to-br from-emerald-50/80 to-green-50/80 rounded-2xl overflow-hidden border border-emerald-300/40 w-full shadow-inner shadow-emerald-200/20">
+                  {graphData ? (
+                    <div className="w-full h-[280px] sm:h-[380px] md:h-[500px] lg:h-[600px] overflow-hidden">
+                        <GraphRenderer
+                          graphData={graphData}
+                          graphVersion={graphVersion}
+                          width="100%"
+                          height="100%"
+                          enableAnimation={true}
+                          backgroundColor="#F0FDF4"
+                          borderColor="rgba(16, 185, 129, 0.2)"
+                          nodeColor="#10B981"
+                          edgeColor="#10B981"
+                          textColor="#064E3B"
+                        />
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-[350px] sm:h-[450px] md:h-[550px] lg:h-[600px] text-emerald-500">
+                      <Loader2 className="w-8 h-8 animate-spin" />
+                    </div>
+                  )}
+                </div>
+
+                {!showSummary && steps.length > 0 && (
+                  <div className="mt-4 text-center text-xs md:text-sm text-emerald-600/80 font-semibold">
+                    Step {currentStepIndex + 1} of {steps.length}
+                  </div>
+                )}
+              </motion.div>
+
+              {/* Progress & Current Step Info */}
+              <motion.div
+                initial={{ opacity: 0, x: 800 }}
+                animate={isExiting ? { opacity: 0, x: -800 } : { opacity: 1, x: 0 }}
+                transition={{ duration: 0.7, delay: isExiting ? 0.4 : 0.3, ease: "easeOut" }}
+                className="flex flex-col gap-4 order-3 xl:order-2"
+              >
+                {/* Step Progress */}
+                <div className="bg-white/60 backdrop-blur-xl border-2 border-emerald-300/50 rounded-3xl p-4 md:p-6 shadow-2xl shadow-emerald-300/20">
+                  <h3 className="text-base md:text-lg font-bold text-emerald-700 mb-3 md:mb-4 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 md:w-5 md:h-5" />
+                    Progress
+                  </h3>
+                  <div className="space-y-2 max-h-[300px] md:max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-emerald-400 scrollbar-track-emerald-100/50">
+                    {steps.map((step, index) => (
+                      <div
+                        key={index}
+                        onClick={() => jumpToStep(index)}
+                        className={`flex items-center gap-2 md:gap-3 p-2 md:p-3 rounded-lg transition-all cursor-pointer hover:bg-emerald-200/40 ${
+                          index === currentStepIndex && !showSummary
+                            ? 'bg-emerald-200/60 border border-emerald-400/70'
+                            : index < currentStepIndex || (index === currentStepIndex && showSummary)
+                            ? 'bg-emerald-100/60 border border-emerald-300/50'
+                            : 'bg-slate-100/50 border border-slate-300/40'
+                        }`}
+                      >
+                        <div
+                          className={`w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center font-bold text-xs md:text-sm flex-shrink-0 ${
+                            index === currentStepIndex && isPlaying && !showSummary
+                              ? 'bg-gradient-to-br from-emerald-500 to-green-500 text-white animate-pulse'
+                              : index < currentStepIndex || (index === currentStepIndex && showSummary)
+                              ? 'bg-gradient-to-br from-emerald-400 to-green-400 text-white'
+                              : 'bg-slate-200 text-slate-600'
+                          }`}
+                        >
+                          {index + 1}
+                        </div>
+                        <span
+                          className={`text-xs md:text-sm font-medium ${
+                            index <= currentStepIndex || showSummary
+                              ? 'text-emerald-700'
+                              : 'text-slate-500'
+                          }`}
+                        >
+                          {step.title || `Step ${index + 1}`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* View Summary Button */}
+                  {!isPlaying && steps.length > 0 && (
+                    <button
+                      onClick={showSummaryGraph}
+                      className="w-full mt-3 md:mt-4 px-3 md:px-4 py-2 md:py-3 bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 text-white rounded-xl transition-all font-semibold text-xs md:text-sm shadow-lg hover:shadow-emerald-400/50 flex items-center justify-center gap-2"
+                    >
+                      <Sparkles className="w-3 h-3 md:w-4 md:h-4" />
+                      {showSummary ? 'Viewing Summary' : 'View Summary'}
+                    </button>
+                  )}
+                </div>
+
+                {/* Current Step Details */}
+                {!showSummary && steps[currentStepIndex] && (
+                  <div className="hidden xl:block bg-white/60 backdrop-blur-xl border-2 border-emerald-300/50 rounded-3xl p-6 shadow-2xl shadow-emerald-300/20">
+                    <h3 className="text-lg font-bold text-emerald-700 mb-3">
+                      Current Step
+                    </h3>
+                    <h4 className="font-bold text-emerald-600 text-sm mb-2">
+                      {steps[currentStepIndex].title}
+                    </h4>
+                    <p className="text-sm text-slate-700 leading-relaxed">
+                      {steps[currentStepIndex].text}
+                    </p>
+                    {steps[currentStepIndex].keywords && (
+                      <div className="mt-4">
+                        <p className="text-xs text-slate-600 mb-2">Key Concepts:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {steps[currentStepIndex].keywords.map((keyword, i) => (
+                            <span
+                              key={i}
+                              className="px-2 py-1 bg-emerald-200/70 text-emerald-700 text-xs rounded-lg border border-emerald-300/40"
+                            >
+                              {keyword}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </motion.div>
+
+              {/* Reasoning Process */}
+              <motion.div
+                initial={{ opacity: 0, y: 800 }}
+                animate={isExiting ? { opacity: 0, y: 800 } : { opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, delay: 0.1, ease: "easeOut" }}
+                className="bg-white/60 backdrop-blur-xl border-2 border-emerald-300/50 rounded-3xl p-4 md:p-6 shadow-2xl shadow-emerald-300/20 w-full xl:col-span-3 order-2 xl:order-3"
+              >
+                <h3 className="text-lg md:text-xl font-bold text-emerald-700 mb-4 md:mb-6 flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 md:w-6 md:h-6 animate-pulse" />
+                  Reasoning Process
+                </h3>
+
+                <div className="space-y-3 md:space-y-4 mb-4 md:mb-6">
+                  {steps.map((step, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{
+                        opacity: index <= currentStepIndex ? 1 : 0.3,
+                        x: 0,
+                        scale: index === currentStepIndex && isPlaying ? 1.02 : 1
+                      }}
+                      transition={{ delay: index * 0.1 }}
+                      className={`p-3 md:p-4 rounded-xl transition-all ${
+                        index === currentStepIndex && isPlaying
+                          ? 'bg-emerald-200/60 border-2 border-emerald-400/70 shadow-lg'
+                          : 'bg-slate-50/60 border border-slate-300/50'
+                      }`}
+                    >
+                      {step.title && (
+                        <h4 className="font-bold text-emerald-600 text-xs md:text-sm mb-1">
+                          {step.title}
+                        </h4>
+                      )}
+                      <p className="text-xs md:text-sm text-slate-700 leading-relaxed">
+                        {step.text}
+                      </p>
+                    </motion.div>
+                  ))}
+                </div>
+
+                {/* Final Answer */}
+                {showSummary && finalAnswer && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-gradient-to-br from-emerald-100/80 to-green-100/80 border-2 border-emerald-300/60 rounded-xl p-4 md:p-5 shadow-inner"
+                  >
+                    <h4 className="text-sm md:text-base font-bold text-emerald-700 mb-2 md:mb-3 flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 md:w-5 md:h-5" />
+                      Final Answer
+                    </h4>
+                    <p className="text-xs md:text-sm text-slate-700 leading-relaxed">
+                      {finalAnswer}
+                    </p>
+                  </motion.div>
+                )}
+
+                {/* Reset Button */}
+                {showSummary && (
+                  <motion.button
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.5 }}
+                    onClick={handleReset}
+                    className="w-full mt-4 md:mt-6 px-4 md:px-6 py-2 md:py-3 bg-gradient-to-r from-slate-200 to-slate-300 hover:from-slate-300 hover:to-slate-400 text-slate-800 rounded-xl font-semibold transition-colors text-sm md:text-base border border-slate-300 shadow-md"
+                  >
+                    Ask Another Question
+                  </motion.button>
+                )}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+      </div>
+
+      {/* Animated Bottom Lines */}
+      <div className="fixed bottom-0 left-0 right-0 h-1 z-50 overflow-hidden">
+        <motion.div
+          className="h-full bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-500"
+          animate={{
+            x: ['-100%', '100%'],
+          }}
+          transition={{
+            duration: 2,
+            repeat: Infinity,
+            ease: "linear"
+          }}
+          style={{
+            width: '50%',
+            boxShadow: '0 0 20px rgba(16, 185, 129, 0.8), 0 0 40px rgba(16, 185, 129, 0.6)'
+          }}
+        />
+      </div>
+      <div className="fixed bottom-0 left-0 right-0 h-1 z-40">
+        <motion.div
+          className="h-full bg-gradient-to-r from-transparent via-emerald-400/50 to-transparent"
+          animate={{
+            x: ['-100%', '100%'],
+          }}
+          transition={{
+            duration: 3,
+            repeat: Infinity,
+            ease: "linear",
+            delay: 0.5
+          }}
+          style={{
+            width: '100%',
+          }}
+        />
       </div>
     </div>
   );
