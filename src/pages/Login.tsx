@@ -14,6 +14,8 @@ export type AuthUser = {
   phone?: string;
 };
 
+const KNOWN_USERS_KEY = 'fusion_known_users';
+
 type LoginProps = {
   onAuthenticated: (user: AuthUser) => void;
 };
@@ -49,6 +51,16 @@ function Login({ onAuthenticated }: LoginProps) {
   const [pendingUser, setPendingUser] = useState<AuthUser | null>(null);
   const [pendingName, setPendingName] = useState('');
   const [pendingPhone, setPendingPhone] = useState('');
+  const [knownEmails, setKnownEmails] = useState<string[]>(() => {
+    const raw = localStorage.getItem(KNOWN_USERS_KEY);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter((e) => typeof e === 'string') : [];
+    } catch {
+      return [];
+    }
+  });
   const buttonRef = useRef<HTMLDivElement>(null);
   const [clientId, setClientId] = useState<string | null>(null);
   const backendBaseUrl = useMemo(() => {
@@ -139,8 +151,8 @@ function Login({ onAuthenticated }: LoginProps) {
               locale: payload.locale,
             };
 
-            const hasStoredUser = !!localStorage.getItem('fusion_user');
-            if (hasStoredUser) {
+            const isKnown = baseUser.email && knownEmails.includes(baseUser.email);
+            if (isKnown) {
               saveUserProfile(baseUser);
               onAuthenticated(baseUser);
               return;
@@ -173,7 +185,7 @@ function Login({ onAuthenticated }: LoginProps) {
       console.error('Google auth init failed', err);
       setError('Google authentication is unavailable right now.');
     }
-  }, [clientId, googleReady, loadingClientId, onAuthenticated, pendingUser]);
+  }, [clientId, googleReady, loadingClientId, onAuthenticated, pendingUser, knownEmails]);
 
   const handleCompleteRegistration = async () => {
     if (!pendingUser) return;
@@ -187,6 +199,11 @@ function Login({ onAuthenticated }: LoginProps) {
       phone: pendingPhone.trim(),
     };
     await saveUserProfile(finalUser);
+    if (finalUser.email && !knownEmails.includes(finalUser.email)) {
+      const updated = [...knownEmails, finalUser.email];
+      setKnownEmails(updated);
+      localStorage.setItem(KNOWN_USERS_KEY, JSON.stringify(updated));
+    }
     onAuthenticated(finalUser);
     setPendingUser(null);
   };

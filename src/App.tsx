@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import type { AuthUser } from './pages/Login';
 
 // Lazy load heavy domain pages
@@ -70,25 +70,31 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 text-white overflow-x-hidden">
       {isAuthenticated && user && (
-        <div className="fixed top-4 right-4 z-50 flex items-center gap-3 rounded-full bg-white/10 border border-white/10 backdrop-blur-xl px-4 py-2 shadow-lg shadow-indigo-500/20">
-          {user.picture ? (
-            <img src={user.picture} alt={user.name} className="h-9 w-9 rounded-full border border-white/20 object-cover" />
-          ) : (
-            <div className="h-9 w-9 rounded-full bg-indigo-500/70 flex items-center justify-center text-sm font-semibold">
-              {user.name?.[0]?.toUpperCase() || 'U'}
-            </div>
-          )}
-          <div className="leading-tight">
-            <div className="text-sm font-semibold text-white">{user.name}</div>
-            <div className="text-xs text-slate-200/80">{user.email}</div>
+        <>
+          <div className="fixed top-4 right-4 z-50 flex items-center gap-3 rounded-full bg-white/10 border border-white/10 backdrop-blur-xl px-4 py-2 shadow-lg shadow-indigo-500/20">
+            {user.picture ? (
+              <img src={user.picture} alt={user.name} className="h-9 w-9 rounded-full border border-white/20 object-cover" />
+            ) : (
+              <div className="h-9 w-9 rounded-full bg-indigo-500/70 flex items-center justify-center text-sm font-semibold">
+                {user.name?.[0]?.toUpperCase() || 'U'}
+              </div>
+            )}
+            <button
+              onClick={handleLogout}
+              className="text-xs font-semibold text-rose-100 px-3 py-1 rounded-full bg-rose-500/20 border border-rose-400/40 hover:bg-rose-500/30 transition"
+            >
+              Sign out
+            </button>
           </div>
-          <button
-            onClick={handleLogout}
-            className="text-xs font-semibold text-rose-100 px-3 py-1 rounded-full bg-rose-500/20 border border-rose-400/40 hover:bg-rose-500/30 transition"
+          <motion.div
+            className="fixed top-6 left-6 z-40 text-lg font-semibold text-white/90"
+            initial={{ y: 24, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.6, duration: 0.5, ease: 'easeOut' }}
           >
-            Sign out
-          </button>
-        </div>
+            Graphify • <span className="text-indigo-200">{user.name}</span>
+          </motion.div>
+        </>
       )}
       <AnimatePresence mode="wait">
         <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-32 w-32 border-b-2 border-white"></div></div>}>
