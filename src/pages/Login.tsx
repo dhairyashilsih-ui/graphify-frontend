@@ -11,6 +11,7 @@ export type AuthUser = {
   emailVerified?: boolean;
   hd?: string;
   locale?: string;
+  phone?: string;
 };
 
 type LoginProps = {
@@ -45,6 +46,9 @@ function Login({ onAuthenticated }: LoginProps) {
   const [googleReady, setGoogleReady] = useState(false);
   const [loadingClientId, setLoadingClientId] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pendingUser, setPendingUser] = useState<AuthUser | null>(null);
+  const [pendingName, setPendingName] = useState('');
+  const [pendingPhone, setPendingPhone] = useState('');
   const buttonRef = useRef<HTMLDivElement>(null);
   const [clientId, setClientId] = useState<string | null>(null);
   const backendBaseUrl = useMemo(() => {
@@ -103,6 +107,8 @@ function Login({ onAuthenticated }: LoginProps) {
   }, []);
 
   useEffect(() => {
+    if (pendingUser) return; // Hold Google init while we collect extra details
+
     if (!googleReady || !clientId || !window.google || !buttonRef.current) {
       if (!clientId && !loadingClientId) {
         setError('Google login is not configured on the server.');
@@ -123,7 +129,7 @@ function Login({ onAuthenticated }: LoginProps) {
             const payload = JSON.parse(
               atob(response.credential.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))
             );
-            const user: AuthUser = {
+            const baseUser: AuthUser = {
               sub: payload.sub,
               name: payload.name || payload.given_name || 'User',
               email: payload.email || '',
@@ -132,8 +138,17 @@ function Login({ onAuthenticated }: LoginProps) {
               hd: payload.hd,
               locale: payload.locale,
             };
-            saveUserProfile(user);
-            onAuthenticated(user);
+
+            const hasStoredUser = !!localStorage.getItem('fusion_user');
+            if (hasStoredUser) {
+              saveUserProfile(baseUser);
+              onAuthenticated(baseUser);
+              return;
+            }
+
+            setPendingUser(baseUser);
+            setPendingName(baseUser.name || '');
+            setPendingPhone('');
           } catch (err) {
             console.error('Failed to parse Google credential', err);
             setError('Could not verify Google credential.');
@@ -158,7 +173,23 @@ function Login({ onAuthenticated }: LoginProps) {
       console.error('Google auth init failed', err);
       setError('Google authentication is unavailable right now.');
     }
-  }, [clientId, googleReady, loadingClientId, onAuthenticated]);
+  }, [clientId, googleReady, loadingClientId, onAuthenticated, pendingUser]);
+
+  const handleCompleteRegistration = async () => {
+    if (!pendingUser) return;
+    if (!pendingPhone.trim()) {
+      setError('Please enter your mobile number.');
+      return;
+    }
+    const finalUser: AuthUser = {
+      ...pendingUser,
+      name: pendingName.trim() || pendingUser.name,
+      phone: pendingPhone.trim(),
+    };
+    await saveUserProfile(finalUser);
+    onAuthenticated(finalUser);
+    setPendingUser(null);
+  };
 
   return (
     <div className={`min-h-screen ${backdropGradient} text-white overflow-hidden relative`}>
@@ -193,7 +224,7 @@ function Login({ onAuthenticated }: LoginProps) {
                 <ShieldCheck className="h-5 w-5 text-emerald-300" />
                 <span className="text-sm font-semibold">Google-secured authentication</span>
               </div>
-              <div ref={buttonRef} className="flex flex-col items-start" />
+              {!pendingUser && <div ref={buttonRef} className="flex flex-col items-start" />}
               {error && (
                 <p className="mt-4 text-sm text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3">
                   {error}
@@ -209,6 +240,38 @@ function Login({ onAuthenticated }: LoginProps) {
                 <div className="mt-4 flex items-center gap-2 text-slate-300 text-sm">
                   <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
                   Loading Google authentication...
+                </div>
+              )}
+
+              {pendingUser && (
+                <div className="mt-6 w-full space-y-3">
+                  <div className="flex items-center gap-2 text-slate-200 text-sm">
+                    <Sparkles className="h-4 w-4 text-indigo-300" />
+                    <span>Welcome! Please confirm your details.</span>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs text-slate-300">Full name</label>
+                    <input
+                      className="w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white focus:border-indigo-400 outline-none"
+                      value={pendingName}
+                      onChange={(e) => setPendingName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs text-slate-300">Mobile number</label>
+                    <input
+                      className="w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white focus:border-indigo-400 outline-none"
+                      value={pendingPhone}
+                      onChange={(e) => setPendingPhone(e.target.value)}
+                      placeholder="e.g., +1 415 555 1234"
+                    />
+                  </div>
+                  <button
+                    onClick={handleCompleteRegistration}
+                    className="w-full rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 mt-2 transition border border-indigo-400/60"
+                  >
+                    Continue
+                  </button>
                 </div>
               )}
             </div>

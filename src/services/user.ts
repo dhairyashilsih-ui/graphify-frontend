@@ -1,6 +1,7 @@
 import type { AuthUser } from '../pages/Login';
 
-const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001/api';
+const API_BASE = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001').replace(/\/$/, '');
+const API_URL = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
 
 export async function saveUserProfile(user: AuthUser): Promise<void> {
   if (!user || !user.email) return;
