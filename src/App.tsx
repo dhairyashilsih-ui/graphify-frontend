@@ -88,14 +88,6 @@ function App() {
               <LogOut className="h-4 w-4" />
             </button>
           </div>
-          <motion.div
-            className="fixed top-6 left-6 z-40 text-lg font-semibold text-white/90"
-            initial={{ y: 24, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.6, duration: 0.5, ease: 'easeOut' }}
-          >
-            Graphify • <span className="text-indigo-200">{user.name}</span>
-          </motion.div>
         </>
       )}
       <AnimatePresence mode="wait">
