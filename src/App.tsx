@@ -1,5 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { LogOut } from 'lucide-react';
 import type { AuthUser } from './pages/Login';
 
 // Lazy load heavy domain pages
@@ -71,19 +72,20 @@ function App() {
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 text-white overflow-x-hidden">
       {isAuthenticated && user && (
         <>
-          <div className="fixed top-4 right-4 z-50 flex items-center gap-3 rounded-full bg-white/10 border border-white/10 backdrop-blur-xl px-4 py-2 shadow-lg shadow-indigo-500/20">
+          <div className="fixed top-4 right-4 z-50 flex items-center gap-3 rounded-full bg-white/10 border border-white/10 backdrop-blur-xl px-3 py-2 shadow-lg shadow-indigo-500/20">
             {user.picture ? (
-              <img src={user.picture} alt={user.name} className="h-9 w-9 rounded-full border border-white/20 object-cover" />
+              <img src={user.picture} alt={user.name} className="h-8 w-8 rounded-full border border-white/20 object-cover" />
             ) : (
-              <div className="h-9 w-9 rounded-full bg-indigo-500/70 flex items-center justify-center text-sm font-semibold">
+              <div className="h-8 w-8 rounded-full bg-indigo-500/70 flex items-center justify-center text-xs font-semibold">
                 {user.name?.[0]?.toUpperCase() || 'U'}
               </div>
             )}
             <button
               onClick={handleLogout}
-              className="text-xs font-semibold text-rose-100 px-3 py-1 rounded-full bg-rose-500/20 border border-rose-400/40 hover:bg-rose-500/30 transition"
+              aria-label="Sign out"
+              className="h-8 w-8 flex items-center justify-center rounded-full bg-rose-500/80 text-white hover:bg-rose-500 transition shadow-inner shadow-rose-400/40"
             >
-              Sign out
+              <LogOut className="h-4 w-4" />
             </button>
           </div>
           <motion.div
