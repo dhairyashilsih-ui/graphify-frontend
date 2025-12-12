@@ -43,9 +43,45 @@ const glassCard =
 
 function Login({ onAuthenticated }: LoginProps) {
   const [googleReady, setGoogleReady] = useState(false);
+  const [loadingClientId, setLoadingClientId] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const buttonRef = useRef<HTMLDivElement>(null);
-  const clientId = useMemo(() => import.meta.env.VITE_GOOGLE_CLIENT_ID, []);
+  const [clientId, setClientId] = useState<string | null>(null);
+  const backendBaseUrl = useMemo(() => {
+    const raw = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+    const trimmed = raw.replace(/\/$/, '');
+    // Remove trailing /api to avoid double-prefixing
+    return trimmed.endsWith('/api') ? trimmed.slice(0, -4) : trimmed;
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchClientId() {
+      try {
+        const res = await fetch(`${backendBaseUrl}/api/config/google-client-id`);
+        if (!res.ok) throw new Error(`Backend responded ${res.status}`);
+        const data = await res.json();
+        if (!data?.clientId) throw new Error('Google client ID missing in backend response');
+        if (!cancelled) {
+          setClientId(data.clientId);
+          setError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Failed to load Google client ID from backend', err);
+          setError('Google login is not configured on the server.');
+        }
+      } finally {
+        if (!cancelled) setLoadingClientId(false);
+      }
+    }
+
+    fetchClientId();
+    return () => {
+      cancelled = true;
+    };
+  }, [backendBaseUrl]);
 
   useEffect(() => {
     if (window.google) {
@@ -68,8 +104,8 @@ function Login({ onAuthenticated }: LoginProps) {
 
   useEffect(() => {
     if (!googleReady || !clientId || !window.google || !buttonRef.current) {
-      if (!clientId) {
-        setError('Missing VITE_GOOGLE_CLIENT_ID. Add it to your environment to enable Google login.');
+      if (!clientId && !loadingClientId) {
+        setError('Google login is not configured on the server.');
       }
       return;
     }
@@ -122,7 +158,7 @@ function Login({ onAuthenticated }: LoginProps) {
       console.error('Google auth init failed', err);
       setError('Google authentication is unavailable right now.');
     }
-  }, [clientId, googleReady, onAuthenticated]);
+  }, [clientId, googleReady, loadingClientId, onAuthenticated]);
 
   return (
     <div className={`min-h-screen ${backdropGradient} text-white overflow-hidden relative`}>
@@ -162,6 +198,12 @@ function Login({ onAuthenticated }: LoginProps) {
                 <p className="mt-4 text-sm text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3">
                   {error}
                 </p>
+              )}
+              {loadingClientId && !error && (
+                <div className="mt-4 flex items-center gap-2 text-slate-300 text-sm">
+                  <span className="h-2 w-2 rounded-full bg-indigo-400 animate-pulse" />
+                  Fetching sign-in configuration...
+                </div>
               )}
               {!googleReady && !error && (
                 <div className="mt-4 flex items-center gap-2 text-slate-300 text-sm">
