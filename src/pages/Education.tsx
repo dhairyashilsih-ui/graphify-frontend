@@ -6,11 +6,21 @@ import { generateReasoningPrompt, parseReasoningResponse } from '../utils/graphG
 import { useReasoningPlayer } from '../hooks/useReasoningPlayer';
 import GraphRenderer from '../components/GraphRenderer';
 
-export default function Education({ onBack }) {
+interface ReasoningStep {
+  title: string;
+  text: string;
+  keywords?: string[];
+}
+
+interface EducationProps {
+  onBack: () => void;
+}
+
+export default function Education({ onBack }: EducationProps) {
   const [inputText, setInputText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [showReasoning, setShowReasoning] = useState(false);
-  const [steps, setSteps] = useState([]);
+  const [steps, setSteps] = useState<ReasoningStep[]>([]);
   const [finalAnswer, setFinalAnswer] = useState('');
 
   const {
@@ -30,9 +40,9 @@ export default function Education({ onBack }) {
     return () => cleanup();
   }, [cleanup]);
 
-  const fetchReasoning = async (question) => {
+  const fetchReasoning = async (question: string) => {
     try {
-      const prompt = generateReasoningPrompt(question, 'education');
+      const prompt = generateReasoningPrompt(question, 'education') as any;
       const response = await sendToGroqJSON(prompt);
       const data = parseReasoningResponse(response);
       
@@ -312,8 +322,6 @@ export default function Education({ onBack }) {
                         <GraphRenderer
                           graphData={graphData}
                           graphVersion={graphVersion}
-                          width="100%"
-                          height="100%"
                           enableAnimation={true}
                           backgroundColor="#EFF6FF"
                           borderColor="rgba(59, 130, 246, 0.2)"
@@ -414,7 +422,7 @@ export default function Education({ onBack }) {
                         <div className="mt-4">
                           <p className="text-xs text-slate-600 mb-2">Key Concepts:</p>
                           <div className="flex flex-wrap gap-2">
-                            {steps[currentStepIndex].keywords.map((keyword, i) => (
+                            {steps[currentStepIndex].keywords.map((keyword: string, i: number) => (
                               <span
                                 key={i}
                                 className="px-2 py-1 bg-blue-200/70 text-blue-700 text-xs rounded-lg border border-blue-300/40"

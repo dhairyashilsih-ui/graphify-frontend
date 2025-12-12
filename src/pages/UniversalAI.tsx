@@ -43,7 +43,7 @@ export default function UniversalAI({ onBack }) {
         .map((t, idx) => `${idx + 1}. Q: ${t.q}\nA: ${t.a}`)
         .join('\n');
 
-      const prompt = generateReasoningPrompt(question, 'universal', context);
+      const prompt = generateReasoningPrompt(question, 'universal', context) as any;
       const response = await sendToGroqJSON(prompt, { sessionId: sessionIdRef.current });
       const data = parseReasoningResponse(response);
       

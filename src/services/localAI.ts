@@ -5,6 +5,7 @@ import {
   clearStoredSessionId,
   generateSessionId as generateStoredSessionId
 } from './mongodb';
+import { showBackendErrorToast } from '../utils/backendErrorPopup';
 export interface AIAnalysisRequest {
   domain: string;
   query: string;
@@ -171,12 +172,14 @@ class LocalAIService {
         return formattedResponse;
       } else {
         console.warn('❌ Backend AI request failed, using fallback');
+        showBackendErrorToast(`Backend returned ${response.status}`);
         const fallback = this.getFallbackResponse(request);
         this.updateContext(request.query, fallback);
         return fallback;
       }
     } catch (error) {
       console.warn('❌ Backend AI connection failed, using fallback:', error);
+      showBackendErrorToast('Connection to backend failed');
       const fallback = this.getFallbackResponse(request);
       this.updateContext(request.query, fallback);
       return fallback;

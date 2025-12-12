@@ -30,9 +30,9 @@ export default function Transport({ onBack }) {
     return () => cleanup();
   }, [cleanup]);
 
-  const fetchReasoning = async (question) => {
+  const fetchReasoning = async (question: string) => {
     try {
-      const prompt = generateReasoningPrompt(question, 'transport');
+      const prompt = generateReasoningPrompt(question, 'transport') as any;
       const response = await sendToGroqJSON(prompt);
       const data = parseReasoningResponse(response);
       
@@ -310,8 +310,6 @@ export default function Transport({ onBack }) {
                         <GraphRenderer
                           graphData={graphData}
                           graphVersion={graphVersion}
-                          width="100%"
-                          height="100%"
                           enableAnimation={true}
                           backgroundColor="#ECFEFF"
                           borderColor="rgba(6, 182, 212, 0.2)"

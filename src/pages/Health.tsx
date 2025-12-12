@@ -6,11 +6,21 @@ import { generateReasoningPrompt, parseReasoningResponse } from '../utils/graphG
 import { useReasoningPlayer } from '../hooks/useReasoningPlayer';
 import GraphRenderer from '../components/GraphRenderer';
 
-export default function Health({ onBack }) {
+interface ReasoningStep {
+  title: string;
+  text: string;
+  keywords?: string[];
+}
+
+interface HealthProps {
+  onBack: () => void;
+}
+
+export default function Health({ onBack }: HealthProps) {
   const [inputText, setInputText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [showReasoning, setShowReasoning] = useState(false);
-  const [steps, setSteps] = useState([]);
+  const [steps, setSteps] = useState<ReasoningStep[]>([]);
   const [finalAnswer, setFinalAnswer] = useState('');
 
   const {
@@ -30,9 +40,9 @@ export default function Health({ onBack }) {
     return () => cleanup();
   }, [cleanup]);
 
-  const fetchReasoning = async (question) => {
+  const fetchReasoning = async (question: string) => {
     try {
-      const prompt = generateReasoningPrompt(question, 'health');
+      const prompt = generateReasoningPrompt(question, 'health') as any;
       const response = await sendToGroqJSON(prompt);
       const data = parseReasoningResponse(response);
       
@@ -310,8 +320,6 @@ export default function Health({ onBack }) {
                         <GraphRenderer
                           graphData={graphData}
                           graphVersion={graphVersion}
-                          width="100%"
-                          height="100%"
                           enableAnimation={true}
                           backgroundColor="#FFF1F3"
                           borderColor="rgba(46, 230, 214, 0.2)"
@@ -409,7 +417,7 @@ export default function Health({ onBack }) {
                         <div className="mt-4">
                           <p className="text-xs text-slate-600 mb-2">Key Concepts:</p>
                           <div className="flex flex-wrap gap-2">
-                            {steps[currentStepIndex].keywords.map((keyword, i) => (
+                            {steps[currentStepIndex].keywords.map((keyword: string, i: number) => (
                               <span
                                 key={i}
                                 className="px-2 py-1 bg-rose-200/70 text-rose-700 text-xs rounded-lg border border-rose-300/40"

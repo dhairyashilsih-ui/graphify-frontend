@@ -89,7 +89,6 @@ const premiumEase = [0.22, 1, 0.36, 1] as const;
 
 export default function DomainSelection({ onSelectDomain }: DomainSelectionProps) {
   const orbControls = useAnimation();
-  const contentStartRef = useRef<HTMLDivElement | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -99,7 +98,7 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [hoveredDomain, setHoveredDomain] = useState<string | null>(null);
   const [ringBurst, setRingBurst] = useState(0);
-  const [liftActive, setLiftActive] = useState(false);
+  const [liftActive] = useState(false);
   const voiceAssistantRef = useRef<VoiceAssistant | null>(null);
   const sessionIdRef = useRef<string>('');
   const keyFactsRef = useRef<string[]>([]); // Stores compressed facts only
@@ -173,18 +172,6 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
     updateIsMobile();
     window.addEventListener('resize', updateIsMobile);
     return () => window.removeEventListener('resize', updateIsMobile);
-  }, []);
-
-  // If returning from a domain page, skip the intro header position and scroll to the main content area
-  useEffect(() => {
-    const returning = sessionStorage.getItem('fusion_returning_from_domain');
-    if (returning && contentStartRef.current) {
-      sessionStorage.removeItem('fusion_returning_from_domain');
-      // Wait a tick so layout settles, then scroll the main content into view
-      setTimeout(() => {
-        contentStartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 300);
-    }
   }, []);
 
   useEffect(() => {
@@ -446,10 +433,7 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
       </div>
 
       {/* Full-bleed Graphify intro - Premium White Enterprise Design */}
-      <section
-        ref={contentStartRef}
-        className="relative w-full flex flex-col overflow-hidden px-6 md:px-10 lg:px-16 pb-6 pt-12"
-      >
+      <section className="relative w-full flex flex-col overflow-hidden px-6 md:px-10 lg:px-16 pb-6 pt-12">
         {/* Premium white gradient base */}
         <div className="absolute inset-0 bg-gradient-to-b from-white via-slate-50/30 to-white" />
         

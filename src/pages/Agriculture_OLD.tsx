@@ -133,8 +133,6 @@ export default function Agriculture({ onBack }: AgricultureProps) {
       }
 
       return;
-    }
-
     } else {
       console.log('🔄 No AI response, using demo real-time simulation');
       

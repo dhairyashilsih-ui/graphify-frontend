@@ -1,4 +1,5 @@
 const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001/api';
+import { showBackendErrorToast } from '../utils/backendErrorPopup';
 
 export interface GroqMessage {
   role: 'system' | 'user' | 'assistant';
@@ -33,6 +34,7 @@ export async function sendToGroq(messages: GroqMessage[], options: GroqOptions =
     return data.content;
   } catch (error: any) {
     console.error('Groq API Error:', error);
+    showBackendErrorToast(error?.message || 'Unable to reach AI service');
     
     // Handle specific error types
     if (error.message?.includes('API key')) {
@@ -81,6 +83,7 @@ export async function sendToGroqJSON(messages: GroqMessage[], options: GroqOptio
     return content;
   } catch (error: any) {
     console.error('Groq API JSON Error:', error);
+    showBackendErrorToast(error?.message || 'Unable to reach AI service');
     
     if (error.message?.includes('API key')) {
       throw new Error('Invalid API key. Please check your Groq API key.');

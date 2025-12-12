@@ -30,9 +30,9 @@ export default function Finance({ onBack }) {
     return () => cleanup();
   }, [cleanup]);
 
-  const fetchReasoning = async (question) => {
+  const fetchReasoning = async (question: string) => {
     try {
-      const prompt = generateReasoningPrompt(question, 'finance');
+      const prompt = generateReasoningPrompt(question, 'finance') as any;
       const response = await sendToGroqJSON(prompt);
       const data = parseReasoningResponse(response);
       
