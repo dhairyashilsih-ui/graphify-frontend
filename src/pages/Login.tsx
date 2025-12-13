@@ -216,7 +216,7 @@ function Login({ onAuthenticated }: LoginProps) {
         <div className="absolute left-1/2 bottom-0 h-64 w-64 -translate-x-1/2 rounded-full bg-blue-500/20 blur-3xl" />
       </div>
 
-      <div className="relative flex min-h-screen items-center justify-center px-6 py-12">
+      <div className="relative flex min-h-screen items-center justify-center px-4 sm:px-6 py-10 sm:py-12">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -231,12 +231,12 @@ function Login({ onAuthenticated }: LoginProps) {
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white mb-4">
             Sign in to continue
           </h1>
-          <p className="text-lg text-slate-200/80 max-w-2xl mb-8">
-            Securely authenticate with Google to access the full suite of AI domains. Your profile is kept locally for a seamless return experience.
+          <p className="text-base sm:text-lg text-slate-200/80 max-w-2xl mb-8 sm:mb-10">
+            Securely authenticate with Google to access the AI domains.
           </p>
 
-          <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] items-center">
-            <div className={`${glassCard} p-6 sm:p-7 border-white/5 bg-white/5`}>
+          <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] items-start">
+            <div className={`${glassCard} p-5 sm:p-6 border-white/5 bg-white/5`}>
               <div className="flex items-center gap-3 text-slate-200 mb-4">
                 <ShieldCheck className="h-5 w-5 text-emerald-300" />
                 <span className="text-sm font-semibold">Google-secured authentication</span>
@@ -293,7 +293,7 @@ function Login({ onAuthenticated }: LoginProps) {
               )}
             </div>
 
-            <div className="space-y-4 text-slate-200/90">
+            <div className="space-y-4 text-slate-200/90 hidden lg:block">
               <div className={`${glassCard} p-5 border-white/5`}>
                 <div className="flex items-center gap-3 mb-2">
                   <LogIn className="h-5 w-5 text-sky-300" />

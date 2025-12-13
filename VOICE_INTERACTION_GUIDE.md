@@ -18,7 +18,7 @@ The home page now features an **interactive AI voice assistant** powered by Groq
 
 ### 3. **AI Processing with Groq** 🧠
 - User speech is transcribed to text
-- Text is sent to **Groq API** (Mixtral-8x7b model)
+- Text is sent to **Groq API** (llama-3.1-8b-instant model)
 - AI generates contextual, helpful responses
 - Maintains conversation history for context
 
@@ -72,7 +72,7 @@ The home page now features an **interactive AI voice assistant** powered by Groq
 ```
 User Speech → Speech Recognition API → Text
     ↓
-Text → Groq API (Mixtral-8x7b) → AI Response
+Text → Groq API (llama-3.1-8b-instant) → AI Response
     ↓
 AI Response → Speech Synthesis API → Spoken Audio
     ↓
@@ -120,7 +120,7 @@ scale: [1, 1.15, 1, 1.1, 1, 1.12, 1] // dynamic repeat based on text length
 ### Change AI Model:
 ```typescript
 // In src/services/groqAI.ts
-model: 'mixtral-8x7b-32768' // or 'llama2-70b-4096', 'gemma-7b-it'
+model: 'llama-3.1-8b-instant'
 ```
 
 ### Adjust Speech Rate/Pitch:

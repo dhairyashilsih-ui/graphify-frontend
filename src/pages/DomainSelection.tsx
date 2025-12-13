@@ -175,6 +175,12 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
   }, []);
 
   useEffect(() => {
+    // On mobile or reduced-motion, keep orb static to save CPU/GPU
+    if (prefersReducedMotion || isMobile) {
+      orbControls.start({ scale: 1, opacity: 1 });
+      return () => orbControls.stop();
+    }
+
     if (isSpeaking) {
       orbControls.start({
         scale: [1, 1.02, 1],
@@ -211,7 +217,7 @@ export default function DomainSelection({ onSelectDomain }: DomainSelectionProps
     });
 
     return () => orbControls.stop();
-  }, [isSpeaking, isListening, orbControls]);
+  }, [isSpeaking, isListening, orbControls, prefersReducedMotion, isMobile]);
 
   useEffect(() => {
     voiceAssistantRef.current = new VoiceAssistant();
